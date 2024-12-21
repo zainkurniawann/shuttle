@@ -1,0 +1,304 @@
+package services
+
+import (
+	"database/sql"
+	"encoding/json"
+	"shuttle/errors"
+	"shuttle/models/dto"
+	"shuttle/models/entity"
+	"shuttle/repositories"
+	"time"
+
+	"github.com/google/uuid"
+)
+
+type StudentServiceInterface interface {
+	GetAllStudentsWithParents(page int, limit int, sortField string, sortDirection string, schoolUUIDStr string) ([]dto.SchoolStudentParentResponseDTO, int, error)
+	GetSpecStudentWithParents(id, schoolUUIDStr string) (dto.SchoolStudentParentResponseDTO, error)
+	AddSchoolStudentWithParents(student dto.SchoolStudentParentRequestDTO, schoolUUID string, username string) error
+	UpdateSchoolStudentWithParents(id string, student dto.SchoolStudentParentRequestDTO, schoolUUID, username string) error
+	DeleteSchoolStudentWithParentsIfNeccessary(id, schoolUUID, username string) error
+}
+
+type StudentService struct {
+	userService       UserServiceInterface
+	studentRepository repositories.StudentRepositoryInterface
+	userRepository    repositories.UserRepositoryInterface
+}
+
+func NewStudentService(studentRepository repositories.StudentRepositoryInterface, userService UserServiceInterface, userRepository repositories.UserRepositoryInterface) StudentService {
+	return StudentService{
+		userService:       userService,
+		studentRepository: studentRepository,
+		userRepository:    userRepository,
+	}
+}
+
+func (service *StudentService) GetAllStudentsWithParents(page int, limit int, sortField string, sortDirection string, schoolUUIDStr string) ([]dto.SchoolStudentParentResponseDTO, int, error) {
+	offset := (page - 1) * limit
+
+	students, parent, err := service.studentRepository.FetchAllStudentsWithParents(offset, limit, sortField, sortDirection, schoolUUIDStr)
+	if err != nil {
+		return nil, 0, err
+	}
+
+	total, err := service.studentRepository.CountAllStudentsWithParents(schoolUUIDStr)
+	if err != nil {
+		return nil, 0, err
+	}
+
+	var studentsWithParents []dto.SchoolStudentParentResponseDTO
+	
+	for _, student := range students {
+		var parentName string
+		if !student.ParentUUID.Valid || student.ParentUUID.String == "" {
+			parentName = "N/A"
+		} else {
+			parentName = parent.FirstName + " " + parent.LastName
+		}
+	
+		// Memeriksa Address
+		Address := ""
+		if student.StudentAddress.Valid {
+			Address = student.StudentAddress.String
+		}
+	
+		// Memeriksa PickupPoint
+		var pickupPoint string
+			if student.StudentPickupPoint.Valid {
+				pickupPoint = student.StudentPickupPoint.String // Ini sudah berupa string
+		}
+	
+		studentsWithParents = append(studentsWithParents, dto.SchoolStudentParentResponseDTO{
+			StudentUUID:      student.UUID.String(),
+			ParentName:       parentName,
+			StudentFirstName: student.FirstName,
+			StudentLastName:  student.LastName,
+			StudentGender:    dto.Gender(student.Gender),
+			StudentGrade:     student.Grade,
+			Address:          Address,     // Address ditambahkan
+			PickupPoint:      pickupPoint, // PickupPoint ditambahkan
+			CreatedAt:        safeTimeFormat(student.CreatedAt),
+		})
+	}	
+	return studentsWithParents, total, nil
+}
+
+
+func (service *StudentService) GetSpecStudentWithParents(id, schoolUUIDStr string) (dto.SchoolStudentParentResponseDTO, error) {
+	studentUUID, err := uuid.Parse(id)
+	if err != nil {
+		return dto.SchoolStudentParentResponseDTO{}, err
+	}
+
+	student, parent, err := service.studentRepository.FetchSpecStudentWithParents(studentUUID, schoolUUIDStr)
+	if err != nil {
+		return dto.SchoolStudentParentResponseDTO{}, err
+	}
+
+	var parentName string
+    if !student.ParentUUID.Valid || student.ParentUUID.String == "" {
+        parentName = "N/A"
+    } else {
+        parentName = parent.FirstName + " " + parent.LastName
+    }
+
+	Address := ""
+	if student.StudentAddress.Valid {
+		Address = student.StudentAddress.String
+	}
+	
+	var pickupPoint string
+	if student.StudentPickupPoint.Valid {
+		pickupPoint = student.StudentPickupPoint.String // Ini sudah berupa string
+	}
+
+	return dto.SchoolStudentParentResponseDTO{
+		StudentUUID:       student.UUID.String(),
+		ParentUUID:        student.ParentUUID.String,
+		ParentName:        parentName,
+		ParentPhone:       parent.Phone,
+		StudentFirstName:  student.FirstName,
+		StudentLastName:   student.LastName,
+		StudentGender:     dto.Gender(student.Gender),
+		StudentGrade:      student.Grade,
+		Address:          Address,     // Address ditambahkan
+		PickupPoint:      pickupPoint, // PickupPoint ditambahkan // Menambahkan student_pickup_point
+		CreatedAt:         safeTimeFormat(student.CreatedAt),
+		CreatedBy:         safeStringFormat(student.CreatedBy),
+		UpdatedAt:         safeTimeFormat(student.UpdatedAt),
+		UpdatedBy:         safeStringFormat(student.UpdatedBy),
+	}, nil
+}
+
+func (service *StudentService) AddSchoolStudentWithParents(student dto.SchoolStudentParentRequestDTO, schoolUUID string, username string) error {
+	var parentID uuid.UUID
+
+	// Periksa apakah email parent sudah ada di database
+	parentExists, err := service.userRepository.CheckEmailExist("", student.Parent.Email)
+	if err != nil {
+		return err
+	}
+
+	// Mulai transaksi
+	tx, err := service.userRepository.BeginTransaction()
+	if err != nil {
+		return err
+	}
+
+	var transactionError error
+	defer func() {
+		if transactionError != nil {
+			tx.Rollback()
+		} else {
+			tx.Commit()
+		}
+	}()
+
+	if !parentExists {
+		// Jika parent belum ada, tambahkan data parent baru
+		newParent := &dto.UserRequestsDTO{
+			Username:  student.Parent.Username,
+			FirstName: student.Parent.FirstName,
+			LastName:  student.Parent.LastName,
+			Gender:    student.Parent.Gender,
+			Email:     student.Parent.Email,
+			Password:  student.Parent.Password,
+			Role:      dto.Role(entity.Parent),
+			RoleCode:  "P",
+			Phone:     student.Parent.Phone,
+			Address:   student.Parent.Address,
+		}
+
+		parentID, err = service.userService.AddUser(*newParent, username)
+		if err != nil {
+			transactionError = err
+			return transactionError
+		}
+	} else {
+		// Jika parent sudah ada, ambil UUID-nya
+		parentID, err = service.userRepository.FetchUUIDByEmail(student.Parent.Email)
+		if err != nil {
+			transactionError = err
+			return transactionError
+		}
+	}
+
+	// Proses pickup point menjadi JSON jika perlu
+	var pickupPointJSON []byte
+	if student.Student.StudentPickupPoint != nil {
+		pickupPointJSON, err = json.Marshal(student.Student.StudentPickupPoint)
+		if err != nil {
+			transactionError = err
+			return transactionError
+		}
+	}
+
+	// Buat data siswa baru
+	newStudent := &entity.Student{
+		ID:        time.Now().UnixMilli()*1e6 + int64(uuid.New().ID()%1e6),
+		UUID:      uuid.New(),
+		ParentUUID: sql.NullString{String: parentID.String(), Valid: true},
+		SchoolUUID:       *parseSafeUUID(schoolUUID),
+		FirstName: student.Student.StudentFirstName,
+		LastName:  student.Student.StudentLastName,
+		Gender:    string(student.Student.StudentGender),
+		Grade:     student.Student.StudentGrade,
+		StudentAddress:   sql.NullString{String: student.Student.StudentAddress, Valid: true},
+		StudentPickupPoint: sql.NullString{String: string(pickupPointJSON), Valid: true},
+		CreatedBy:        sql.NullString{String: username, Valid: true},
+	}
+
+	// Simpan data siswa
+	err = service.studentRepository.SaveStudent(*newStudent)
+	if err != nil {
+		transactionError = err
+		return transactionError
+	}
+
+	return nil
+}
+
+func (service *StudentService) UpdateSchoolStudentWithParents(id string, student dto.SchoolStudentParentRequestDTO, schoolUUID, username string) error {
+	studentUUID, err := uuid.Parse(id)
+	if err != nil {
+		return err
+	}
+
+	// Mulai transaksi
+	tx, err := service.userRepository.BeginTransaction()
+	if err != nil {
+		return err
+	}
+
+	var transactionError error
+	defer func() {
+		if transactionError != nil {
+			tx.Rollback()
+		} else {
+			tx.Commit()
+		}
+	}()
+
+	// Ambil data parent lama berdasarkan UUID siswa
+	var parentData entity.ParentDetails
+	_, parentData, err = service.studentRepository.FetchSpecStudentWithParents(studentUUID, schoolUUID)
+	if err != nil {
+		transactionError = err
+		return transactionError
+	}
+
+	// Proses pickup point menjadi JSON jika perlu
+	var pickupPointJSON []byte
+	if student.Student.StudentPickupPoint != nil {
+		pickupPointJSON, err = json.Marshal(student.Student.StudentPickupPoint)
+		if err != nil {
+			transactionError = err
+			return transactionError
+		}
+	}
+
+	// Update data siswa
+	studentEntity := &entity.Student{
+		UUID:      studentUUID,
+		ParentUUID: sql.NullString{String: parentData.UserUUID.String(), Valid: true},
+		SchoolUUID:       *parseSafeUUID(schoolUUID),
+		FirstName: student.Student.StudentFirstName,
+		LastName:  student.Student.StudentLastName,
+		Gender:    string(student.Student.StudentGender),
+		Grade:     student.Student.StudentGrade,
+		StudentAddress:   sql.NullString{String: student.Student.StudentAddress, Valid: true},
+		StudentPickupPoint: sql.NullString{String: string(pickupPointJSON), Valid: true},
+		UpdatedBy:        sql.NullString{String: username, Valid: true},
+	}
+
+	err = service.studentRepository.UpdateStudent(*studentEntity)
+	if err != nil {
+		transactionError = err
+		return transactionError
+	}
+
+	// Update data parent
+	err = service.userService.UpdateUser(parentData.UserUUID.String(), student.Parent, username, nil)
+	if err != nil {
+		transactionError = err
+		return transactionError
+	}
+
+	return nil
+}
+
+
+func (service *StudentService) DeleteSchoolStudentWithParentsIfNeccessary(id, schoolUUID, username string) error {
+	studentUUID, err := uuid.Parse(id)
+	if err != nil {
+		return err
+	}
+
+	_, _,err = service.studentRepository.FetchSpecStudentWithParents(studentUUID, schoolUUID)
+	if err != nil {
+		return errors.New("student not found", 404)	
+	}
+
+	return service.studentRepository.DeleteStudentWithParents(studentUUID, schoolUUID, username)
+}
