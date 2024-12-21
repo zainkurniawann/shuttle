@@ -5,8 +5,8 @@ This project is a **RESTful API** built with **Golang** and **Fiber framework**.
 ## 🛠 Installation  
 
 ### Requirements  
-- [Golang](https://go.dev/doc/install)  
-- [MongoDB](https://www.mongodb.com/try/download/community-edition)  
+- [Golang](https://go.dev/doc/install)
+- [Postgres](https://www.postgresql.org/)
 
 ### Run the Project  
 ```sh
