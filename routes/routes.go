@@ -18,7 +18,7 @@ func Route(r *fiber.App, db *sqlx.DB) {
 	schoolRepository := repositories.NewSchoolRepository(db)
 	vehicleRepository := repositories.NewVehicleRepository(db)
 	studentRepository := repositories.NewStudentRepository(db)
-	// routeRepository := repositories.NewRouteRepository(db)
+	routeRepository := repositories.NewRouteRepository(db)
 	childernRepository := repositories.NewChildernRepository(db)
 	shuttleRepository := repositories.NewShuttleRepository(db)
 	
@@ -27,7 +27,7 @@ func Route(r *fiber.App, db *sqlx.DB) {
 	schoolService := services.NewSchoolService(schoolRepository, userRepository)
 	vehicleService := services.NewVehicleService(vehicleRepository)
 	studentService := services.NewStudentService(studentRepository, &userService, userRepository)
-	// routeService := services.NewRouteService(routeRepository)
+	routeService := services.NewRouteService(routeRepository)
 	childernService := services.NewChildernService(childernRepository)
 	shuttleService := services.NewShuttleService(shuttleRepository)
 	
@@ -36,7 +36,7 @@ func Route(r *fiber.App, db *sqlx.DB) {
 	schoolHandler := handler.NewSchoolHttpHandler(schoolService)
 	vehicleHandler := handler.NewVehicleHttpHandler(vehicleService)
 	studentHandler := handler.NewStudentHttpHandler(studentService)
-	// routeHandler := handler.NewRouteHttpHandler(routeService)
+	routeHandler := handler.NewRouteHttpHandler(routeService)
 	childernHandler := handler.NewChildernHandler(childernService)
 	shuttleHandler := handler.NewShuttleHandler(shuttleService)
 
@@ -123,14 +123,17 @@ func Route(r *fiber.App, db *sqlx.DB) {
 	protectedSchoolAdmin.Delete("/user/driver/delete/:id", userHandler.DeleteSchoolDriver)
 
 	// ROUTE FOR SCHOOL ADMIN
-	// protectedSchoolAdmin.Get("/route/add", routeHandler.AddRoute)
+	protectedSchoolAdmin.Post("/route/add", routeHandler.AddRoute)
+	protectedSchoolAdmin.Put("/route/update/:id", routeHandler.UpdateRoute)
 
-	protectedParent.Get("/my/childern/all", childernHandler.GetAllChilderns)
-	protectedParent.Get("/my/childern/update/id", childernHandler.UpdateChildern)
-	protectedParent.Get("/my/childern/shuttle/track", shuttleHandler.GetShuttleTrackByParent)
-	protectedParent.Get("/my/childern/shuttle/:id", shuttleHandler.GetSpecShuttle)
+	protectedParent.Get("/my/childern/track", shuttleHandler.GetShuttleTrackByParent) //buat menu track
+	protectedParent.Get("/my/childern/all", childernHandler.GetAllChilderns) //buat menu apalah
+	protectedParent.Get("/my/childern/shuttle/:id", shuttleHandler.GetSpecShuttle) //buat menu opo jeneng e lali😂 (spec shutle)
+	protectedParent.Get("/my/childern/recap", shuttleHandler.GetAllShuttleByParent) //buat menu recap
+	protectedParent.Get("/my/childern/:id", childernHandler.GetSpecChildern) //nih katanya butuh spec
+	protectedParent.Put("/my/childern/update/:id", childernHandler.UpdateChildern) //menu update nih tampling
 
 	protectedDriver.Post("/shuttle/add", shuttleHandler.AddShuttle)
 	protectedDriver.Get("/shuttle/:id", shuttleHandler.GetSpecShuttle)
-	protectedDriver.Put("/shuttle/update/:id", shuttleHandler.EditShuttle)
+	protectedDriver.Put("/shuttle/update/:id", shuttleHandler.EditShuttle) 
 }

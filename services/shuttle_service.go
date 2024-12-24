@@ -13,6 +13,7 @@ import (
 
 type ShuttleServiceInterface interface {
 	GetShuttleTrackByParent(parentUUID uuid.UUID) ([]dto.ShuttleResponse, error)
+	GetAllShuttleByParent(parentUUID uuid.UUID) ([]dto.ShuttleAllResponse, error)
 	GetSpecShuttle(shuttleUUID uuid.UUID) ([]dto.ShuttleSpecResponse, error)
 	AddShuttle(req dto.ShuttleRequest, driverUUID, createdBy string) error
 	EditShuttleStatus(shuttleUUID, status string) error
@@ -29,7 +30,7 @@ func NewShuttleService(shuttleRepository repositories.ShuttleRepositoryInterface
 }
 
 func (s *ShuttleService) GetShuttleTrackByParent(parentUUID uuid.UUID) ([]dto.ShuttleResponse, error) {
-	shuttles, err := s.shuttleRepository.GetShuttleTrackByParent(parentUUID)
+	shuttles, err := s.shuttleRepository.FetchShuttleTrackByParent(parentUUID)
 	if err != nil {
 		return nil, err
 	}
@@ -53,6 +54,35 @@ func (s *ShuttleService) GetShuttleTrackByParent(parentUUID uuid.UUID) ([]dto.Sh
 
 	return responses, nil
 }
+
+func (s *ShuttleService) GetAllShuttleByParent(parentUUID uuid.UUID) ([]dto.ShuttleAllResponse, error) {
+	// Fetch data from the repository
+	shuttles, err := s.shuttleRepository.FetchAllShuttleByParent(parentUUID)
+	if err != nil {
+		return nil, err
+	}
+
+	// Transform the data if needed (DTO is already in the required format)
+	responses := make([]dto.ShuttleAllResponse, len(shuttles))
+	for i, shuttle := range shuttles {
+		responses[i] = dto.ShuttleAllResponse{
+			StudentUUID:     shuttle.StudentUUID,
+			Status:          shuttle.Status,
+			StudentFirstName: shuttle.StudentFirstName,
+			StudentLastName:  shuttle.StudentLastName,
+			StudentGrade:     shuttle.StudentGrade,
+			StudentGender:    shuttle.StudentGender,
+			ParentUUID:       shuttle.ParentUUID,
+			SchoolUUID:       shuttle.SchoolUUID,
+			SchoolName:       shuttle.SchoolName,
+			CreatedAt:        shuttle.CreatedAt,
+			UpdatedAt:        shuttle.UpdatedAt,
+		}
+	}
+
+	return responses, nil
+}
+
 
 func (s *ShuttleService) GetSpecShuttle(shuttleUUID uuid.UUID) ([]dto.ShuttleSpecResponse, error) {
 	shuttles, err := s.shuttleRepository.GetSpecShuttle(shuttleUUID)

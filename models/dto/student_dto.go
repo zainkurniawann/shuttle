@@ -4,13 +4,15 @@ import ()
 
 type StudentResponseDTO struct {
 	UUID       string `json:"student_uuid"`
-	FirstName  string `json:"first_name"`
-	LastName   string `json:"last_name"`
-	Gender     string `json:"gender" validate:"required,max=50"`
-	Grade      string `json:"grade" validate:"required,max=50"`
+	FirstName  string `json:"student_first_name"`
+	LastName   string `json:"student_last_name"`
+	Gender     string `json:"student_gender" validate:"required,max=50"`
+	Grade      string `json:"student_grade" validate:"required,max=50"`
 	ParentUUID string `json:"parent_uuid,omitempty"`
 	SchoolUUID string `json:"school_uuid"`
 	SchoolName string `json:"school_name,omitempty"`
+	StudentAddress   string `json:"student_address"`
+	PickupPoint      string `json:"student_pickup_point"`
 	ShuttleStatus string `json:"shuttle_status,omitempty"`
 	CreatedAt  string `json:"created_at,omitempty"`
 	CreatedBy  string `json:"created_by,omitempty"`
@@ -24,6 +26,14 @@ type StudentRequestDTO struct {
 	StudentLastName  string `json:"student_last_name" validate:"required"`
 	StudentGender    Gender `json:"student_gender" validate:"required"`
 	StudentGrade     string `json:"student_grade" validate:"required"`
+	StudentAddress   string `json:"student_address" validate:"required"` // Menambahkan field student_address
+	StudentPickupPoint map[string]float64 `json:"student_pickup_point" validate:"required"`
+}
+
+type StudentRequestByParentDTO struct {
+	StudentFirstName string `json:"student_first_name" validate:"required"`
+	StudentLastName  string `json:"student_last_name" validate:"required"`
+	StudentGender    Gender `json:"student_gender" validate:"required"`
 	StudentAddress   string `json:"student_address" validate:"required"` // Menambahkan field student_address
 	StudentPickupPoint map[string]float64 `json:"student_pickup_point" validate:"required"`
 }

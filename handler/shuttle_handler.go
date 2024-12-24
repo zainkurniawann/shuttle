@@ -5,6 +5,7 @@ import (
 	"shuttle/models/dto"
 	"shuttle/services"
 	"shuttle/utils"
+	"fmt"
 	"strings"
 	"errors"
 	"database/sql"
@@ -43,6 +44,30 @@ func (h *ShuttleHandler) GetShuttleTrackByParent(c *fiber.Ctx) error {
 
 	return c.Status(http.StatusOK).JSON(shuttles)
 }
+
+func (h *ShuttleHandler) GetAllShuttleByParent(c *fiber.Ctx) error {
+    userUUID, ok := c.Locals("userUUID").(string)
+    if !ok || userUUID == "" {
+        return utils.BadRequestResponse(c, "Invalid or missing userUUID", nil)
+    }
+    
+    parentUUID, err := uuid.Parse(userUUID)
+    if err != nil {
+        return utils.BadRequestResponse(c, "Invalid userUUID format", nil)
+    }
+    
+    // Debug log
+    fmt.Println("ParentUUID:", parentUUID)
+
+    shuttles, err := h.ShuttleService.GetAllShuttleByParent(parentUUID)
+    if err != nil {
+        return utils.NotFoundResponse(c, "Shuttle data not found", nil)
+    }
+
+    return c.Status(http.StatusOK).JSON(shuttles)
+}
+
+
 
 func (h *ShuttleHandler) GetSpecShuttle(c *fiber.Ctx) error {
 	shuttleUUIDParam := c.Params("id")
