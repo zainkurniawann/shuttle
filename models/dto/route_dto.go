@@ -8,12 +8,49 @@ package dto
 // }
 
 type RouteRequestDTO struct {
-	DriverUUID		 string					`json:"driver_uuid" validate:"required"`
-	StudentUUID		 string					`json:"student_uuid" validate:"required"`
-	SchoolUUID		 string					`json:"school_uuid" validate:"required"`
-	RouteName        string                 `json:"route_name" validate:"required"`
-	RouteDescription string                 `json:"route_description" validate:"required"`
+	DriverUUID		 string			`json:"driver_uuid" validate:"required"`
+	StudentUUID		 string			`json:"student_uuid" validate:"required"`
+	SchoolUUID		 string			`json:"school_uuid" validate:"required"`
+	RouteName        string         `json:"route_name" validate:"required"`
+	RouteDescription string         `json:"route_description" validate:"required"`
 }
+
+type RouteResponseDTO struct {
+	RouteUUID		 string			`json:"route_uuid,omitempty"`
+	DriverUUID		 string			`json:"driver_uuid,omitempty"`
+	StudentUUID		 string			`json:"student_uuid,omitempty"`
+	SchoolUUID		 string			`json:"school_uuid,omitempty"`
+	RouteName        string         `json:"route_name,omitempty"`
+	RouteDescription string         `json:"route_description,omitempty"`
+	CreatedAt      	 string			`json:"created_at,omitempty"`
+	CreatedBy      	 string 		`json:"created_by,omitempty"`
+	UpdatedAt      	 string 		`json:"updated_at,omitempty"`
+	UpdatedBy      	 string 		`json:"updated_by,omitempty"`
+}
+
+type RouteResponseByDriverDTO struct {
+    RouteUUID          string `db:"route_uuid"`
+    StudentUUID        string `db:"student_uuid"`
+    DriverUUID         string `db:"driver_uuid"`
+    SchoolUUID         string `db:"school_uuid"`
+    StudentFirstName   string `db:"student_first_name"`
+    StudentLastName    string `db:"student_last_name"`
+    StudentAddress     string `db:"student_address"`
+    StudentPickupPoint string `db:"student_pickup_point"`
+    SchoolName         string `db:"school_name"`
+    SchoolPoint        string `db:"school_point"`
+}
+
+
+
+
+
+
+
+
+
+
+
 
 
 // -- Table: public.route_jawa

@@ -123,8 +123,15 @@ func Route(r *fiber.App, db *sqlx.DB) {
 	protectedSchoolAdmin.Delete("/user/driver/delete/:id", userHandler.DeleteSchoolDriver)
 
 	// ROUTE FOR SCHOOL ADMIN
+	protectedSchoolAdmin.Get("/route/all", routeHandler.GetAllRoutes)
+	protectedSchoolAdmin.Get("/route/:id", routeHandler.GetSpecRoute)
 	protectedSchoolAdmin.Post("/route/add", routeHandler.AddRoute)
 	protectedSchoolAdmin.Put("/route/update/:id", routeHandler.UpdateRoute)
+	protectedSchoolAdmin.Delete("/route/delete/:id", routeHandler.DeleteRoute)
+
+	//ROUTE FOR DRIVER
+	protectedDriver.Get("/route/all", routeHandler.GetAllRoutesByDriver)
+	protectedDriver.Get("/route/:id", routeHandler.GetSpecRouteByDriver)
 
 	protectedParent.Get("/my/childern/track", shuttleHandler.GetShuttleTrackByParent) //buat menu track
 	protectedParent.Get("/my/childern/all", childernHandler.GetAllChilderns) //buat menu apalah
