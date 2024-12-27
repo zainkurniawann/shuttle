@@ -10,6 +10,7 @@ This project is a **RESTful API** built with **Golang** and **Fiber framework**.
 
 ### Run the Project  
 ```sh
+go run ./databases/migrations/coba/goose.go
 go run ./cmd/app/main.go
 ```
 

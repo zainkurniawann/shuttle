@@ -65,10 +65,13 @@ func (service *routeService) GetAllRoutes() ([]dto.RouteResponseDTO, error) {
 			updatedBy = "N/A" // Atau bisa juga ""
 		}
 
+		// Menambahkan UserUsername dan StudentName
 		routeDTOs = append(routeDTOs, dto.RouteResponseDTO{
 			RouteUUID:        route.RouteUUID.String(),
 			DriverUUID:       route.DriverUUID.String(),
+			UserUsername:     route.UserUsername, // Menambahkan UserUsername
 			StudentUUID:      route.StudentUUID.String(),
+			StudentName:      route.StudentName,   // Menambahkan StudentName
 			SchoolUUID:       route.SchoolUUID.String(),
 			RouteName:        route.RouteName,
 			RouteDescription: route.RouteDescription,

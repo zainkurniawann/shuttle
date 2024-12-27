@@ -10,7 +10,9 @@ type Route struct {
 	RouteID          int64          `db:"route_id"`
 	RouteUUID        uuid.UUID      `db:"route_uuid"`
 	DriverUUID		 uuid.UUID		`db:"driver_uuid"`
+	UserUsername 	string			`json:"user_username"`
 	StudentUUID		 uuid.UUID		`db:"Student_uuid"`
+	StudentName		string			`json:"student_name"`
 	SchoolUUID       uuid.UUID      `db:"school_uuid"`
 	RouteName        string         `db:"route_name"`
 	RouteDescription string         `db:"route_description"`

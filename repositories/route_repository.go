@@ -41,10 +41,25 @@ func NewRouteRepository(DB *sqlx.DB) *routeRepository {
 func (r *routeRepository) FetchAllRoutes() ([]entity.Route, error) {
 	// Query untuk mengambil semua data dari tabel routes
 	query := `
-		SELECT route_uuid, driver_uuid, student_uuid, school_uuid, 
-		       route_name, route_description, created_at, created_by, updated_at, updated_by
-		FROM route_jawa
+		SELECT 
+			r.route_uuid,
+			r.driver_uuid,
+			u.user_username,
+			r.student_uuid,
+			CONCAT(s.student_first_name, ' ', s.student_last_name) AS student_name,  -- Gabungkan first_name dan last_name
+			r.school_uuid, 
+			r.route_name,
+			r.route_description,
+			r.created_at,
+			r.created_by,
+			r.updated_at,
+			r.updated_by
+		FROM route_jawa r
+		LEFT JOIN users u ON r.driver_uuid = u.user_uuid
+		LEFT JOIN students s ON r.student_uuid = s.student_uuid
 	`
+
+	// Menjalankan query
 	rows, err := r.DB.Query(query)
 	if err != nil {
 		return nil, fmt.Errorf("failed to execute query: %w", err)
@@ -57,10 +72,13 @@ func (r *routeRepository) FetchAllRoutes() ([]entity.Route, error) {
 	// Iterasi melalui hasil query
 	for rows.Next() {
 		var route entity.Route
+		// Menambahkan user_username dan student_name dalam scan
 		if err := rows.Scan(
 			&route.RouteUUID,
 			&route.DriverUUID,
+			&route.UserUsername,      // Menambahkan field untuk user_username
 			&route.StudentUUID,
+			&route.StudentName,       // Menambahkan field untuk student_name
 			&route.SchoolUUID,
 			&route.RouteName,
 			&route.RouteDescription,
@@ -71,6 +89,7 @@ func (r *routeRepository) FetchAllRoutes() ([]entity.Route, error) {
 		); err != nil {
 			return nil, fmt.Errorf("failed to scan row: %w", err)
 		}
+		// Menambahkan route yang sudah diproses ke slice
 		routes = append(routes, route)
 	}
 
@@ -79,6 +98,7 @@ func (r *routeRepository) FetchAllRoutes() ([]entity.Route, error) {
 		return nil, fmt.Errorf("failed to iterate over rows: %w", err)
 	}
 
+	// Mengembalikan hasil
 	return routes, nil
 }
 
