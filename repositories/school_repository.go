@@ -143,7 +143,7 @@ func (repositories *schoolRepository) FetchSpecSchool(id string) (entity.School,
 	var userUUIDs, adminSchoolUUIDs, firstNames, lastNames sql.NullString // Use sql.NullString for nullable fields
 
 	query := `
-		SELECT s.school_uuid, s.school_name, s.school_address, s.school_contact, s.school_email, s.school_description, s.school_point s.created_at,
+		SELECT s.school_uuid, s.school_name, s.school_address, s.school_contact, s.school_email, s.school_description, s.school_point, s.created_at,
 			s.created_by, s.updated_at, s.updated_by, 
 			COALESCE(
 				STRING_AGG(

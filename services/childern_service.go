@@ -55,7 +55,6 @@ func (service *ChildernService) GetAllChilderns(id string) ([]dto.StudentRespons
             Gender:        childern.Gender,
             SchoolUUID:    childern.SchoolUUID.String(),
 			SchoolName: childern.SchoolName,
-            ShuttleStatus: childern.ShuttleStatus.String, // Gunakan String
         })
     }
 

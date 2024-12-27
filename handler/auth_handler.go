@@ -2,6 +2,7 @@ package handler
 
 import (
 	"fmt"
+	"log"
 	"shuttle/logger"
 	"shuttle/models/dto"
 	"shuttle/services"
@@ -83,60 +84,66 @@ func (handler *authHandler) Login(c *fiber.Ctx) error {
 }
 
 func (handler *authHandler) Logout(c *fiber.Ctx) error {
+	log.Println("Logout function triggered")
 	userUUID, ok := c.Locals("userUUID").(string)
 	if !ok {
+		log.Println("UserUUID not found in context")
 		return utils.UnauthorizedResponse(c, "Token is invalid", nil)
 	}
+	log.Printf("UserUUID retrieved: %s\n", userUUID)
 
 	// Delete WebSocket connection if exists
 	conn, exists := utils.GetConnection(userUUID)
 	if exists {
+		log.Println("WebSocket connection exists, closing connection...")
 		conn.Close()
 		utils.RemoveConnection(userUUID)
-		logger.LogInfo("WebSocket connection closed", map[string]interface{}{
-			"user_uuid": userUUID,
-		})
+		log.Printf("WebSocket connection for user %s closed and removed\n", userUUID)
 	}
 
 	err := handler.authService.DeleteRefreshTokenOnLogout(c.Context(), userUUID)
 	if err != nil {
-		logger.LogError(err, "Failed to delete refresh token", map[string]interface{}{
-			"user_uuid": userUUID,
-		})
+		log.Printf("Failed to delete refresh token for user %s: %v\n", userUUID, err)
 		return utils.InternalServerErrorResponse(c, "Something went wrong, please try again later", nil)
 	}
+	log.Printf("Refresh token for user %s deleted\n", userUUID)
 
 	utils.InvalidateToken(c.Get("Authorization"))
+	log.Println("Access token invalidated")
 
 	err = handler.authService.UpdateUserStatus(userUUID, "offline", time.Now())
 	if err != nil {
-		logger.LogError(err, "Failed to update user status", map[string]interface{}{
-			"user_uuid": userUUID,
-		})
+		log.Printf("Failed to update user status for user %s: %v\n", userUUID, err)
 		return utils.InternalServerErrorResponse(c, "Something went wrong, please try again later", nil)
 	}
+	log.Printf("User %s status updated to offline\n", userUUID)
 
+	log.Println("Logout process completed successfully")
 	return utils.SuccessResponse(c, "User logged out successfully", nil)
 }
 
 func (handler *authHandler) GetMyProfile(c *fiber.Ctx) error {
+	log.Println("GetMyProfile function triggered")
 	userUUID, ok := c.Locals("userUUID").(string)
 	if !ok {
+		log.Println("UserUUID not found in context")
 		return utils.UnauthorizedResponse(c, "Token is invalid", nil)
 	}
+	log.Printf("UserUUID retrieved: %s\n", userUUID)
 
 	roleCode, ok := c.Locals("role_code").(string)
 	if !ok {
+		log.Println("RoleCode not found in context")
 		return utils.UnauthorizedResponse(c, "Token is invalid", nil)
 	}
+	log.Printf("RoleCode retrieved: %s\n", roleCode)
 
 	user, err := handler.authService.GetMyProfile(userUUID, roleCode)
 	if err != nil {
-		logger.LogError(err, "Failed to get user profile", map[string]interface{}{
-			"user_uuid": userUUID,
-		})
+		log.Printf("Failed to retrieve profile for user %s: %v\n", userUUID, err)
 		return utils.InternalServerErrorResponse(c, "Something went wrong, please try again later", nil)
 	}
+	log.Printf("User profile retrieved for user %s\n", userUUID)
 
 	return utils.SuccessResponse(c, "User profile retrieved", user)
 }

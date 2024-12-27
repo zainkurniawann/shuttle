@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"log"
 
 	"shuttle/errors"
 	"shuttle/logger"
@@ -161,20 +162,28 @@ func (service *UserService) GetAllSchoolAdmin(page int, limit int, sortField, so
 
 func (service *UserService) GetAllDriverFromAllSchools(page int, limit int, sortField string, sortDirection string) ([]dto.UserResponseDTO, int, error) {
 	offset := (page - 1) * limit
+	log.Println("Fetching all drivers with pagination parameters - page:", page, "limit:", limit, "sortField:", sortField, "sortDirection:", sortDirection)
 
 	users, school, vehicle, err := service.userRepository.FetchAllDrivers(offset, limit, sortField, sortDirection)
 	if err != nil {
+		log.Println("Error fetching drivers:", err)
 		return nil, 0, err
 	}
 
+	log.Println("Successfully fetched drivers. Total drivers:", len(users))
+
 	total, err := service.userRepository.CountAllPermittedDriver("")
 	if err != nil {
+		log.Println("Error counting permitted drivers:", err)
 		return nil, 0, err
 	}
+	log.Println("Total permitted drivers:", total)
 
 	var usersDTO []dto.UserResponseDTO
 
 	for _, user := range users {
+		log.Println("Processing user:", user.UUID.String())
+
 		userDTO := dto.UserResponseDTO{
 			UUID:       user.UUID.String(),
 			Username:   user.Username,
@@ -186,8 +195,11 @@ func (service *UserService) GetAllDriverFromAllSchools(page int, limit int, sort
 
 		driverDetails, err := service.userRepository.FetchDriverDetails(user.UUID)
 		if err != nil {
+			log.Println("Error fetching driver details for user:", user.UUID.String(), err)
 			return nil, 0, err
 		}
+
+		log.Println("Successfully fetched driver details for user:", user.UUID.String())
 
 		var vehicleDetails string
 		if vehicle.VehicleNumber == "N/A" || vehicle.UUID == uuid.Nil {
@@ -195,6 +207,8 @@ func (service *UserService) GetAllDriverFromAllSchools(page int, limit int, sort
 		} else {
 			vehicleDetails = fmt.Sprintf("%s (%s)", vehicle.VehicleNumber, vehicle.VehicleName)
 		}
+
+		log.Println("Formatted vehicle details:", vehicleDetails)
 
 		detailsJSON, err := json.Marshal(dto.DriverDetailsResponseDTO{
 			SchoolName:    school.Name,
@@ -208,32 +222,46 @@ func (service *UserService) GetAllDriverFromAllSchools(page int, limit int, sort
 			LicenseNumber: driverDetails.LicenseNumber,
 		})
 		if err != nil {
+			log.Println("Error marshalling driver details to JSON:", err)
 			return nil, 0, err
 		}
-		userDTO.Details = detailsJSON
 
+		log.Println("Successfully marshalled driver details to JSON")
+
+		userDTO.Details = detailsJSON
 		usersDTO = append(usersDTO, userDTO)
+
+		log.Println("User DTO created for user:", user.UUID.String())
 	}
 
+	log.Println("Returning total users and user DTOs.")
 	return usersDTO, total, nil
 }
 
 func (service *UserService) GetAllDriverForPermittedSchool(page int, limit int, sortField string, sortDirection string, schoolUUID string) ([]dto.UserResponseDTO, int, error) {
 	offset := (page - 1) * limit
+	log.Println("Fetching all drivers for school with UUID:", schoolUUID, "page:", page, "limit:", limit, "sortField:", sortField, "sortDirection:", sortDirection)
 
 	users, school, vehicle, err := service.userRepository.FetchAllDriversForPermittedSchool(offset, limit, sortField, sortDirection, schoolUUID)
 	if err != nil {
+		log.Println("Error fetching drivers for school:", err)
 		return nil, 0, err
 	}
 
+	log.Println("Successfully fetched drivers for school:", schoolUUID, "Total drivers:", len(users))
+
 	total, err := service.userRepository.CountAllPermittedDriver(schoolUUID)
 	if err != nil {
+		log.Println("Error counting permitted drivers for school:", err)
 		return nil, 0, err
 	}
+	log.Println("Total permitted drivers for school:", schoolUUID, "Total:", total)
 
 	var usersDTO []dto.UserResponseDTO
 
 	for _, user := range users {
+		log.Println("Processing user:", user.UUID.String(), "for school:", schoolUUID)
+
 		userDTO := dto.UserResponseDTO{
 			UUID:       user.UUID.String(),
 			Username:   user.Username,
@@ -245,8 +273,11 @@ func (service *UserService) GetAllDriverForPermittedSchool(page int, limit int, 
 
 		driverDetails, err := service.userRepository.FetchDriverDetails(user.UUID)
 		if err != nil {
+			log.Println("Error fetching driver details for user:", user.UUID.String(), err)
 			return nil, 0, err
 		}
+
+		log.Println("Successfully fetched driver details for user:", user.UUID.String())
 
 		detailsJSON, err := json.Marshal(dto.DriverDetailsResponseDTO{
 			SchoolName:    school.Name,
@@ -260,15 +291,22 @@ func (service *UserService) GetAllDriverForPermittedSchool(page int, limit int, 
 			LicenseNumber: driverDetails.LicenseNumber,
 		})
 		if err != nil {
+			log.Println("Error marshalling driver details to JSON:", err)
 			return nil, 0, err
 		}
-		userDTO.Details = detailsJSON
 
+		log.Println("Successfully marshalled driver details to JSON")
+
+		userDTO.Details = detailsJSON
 		usersDTO = append(usersDTO, userDTO)
+
+		log.Println("User DTO created for user:", user.UUID.String())
 	}
 
+	log.Println("Returning total users and user DTOs for permitted school.")
 	return usersDTO, total, nil
 }
+
 
 func (service *UserService) GetSpecSuperAdmin(uuid string) (dto.UserResponseDTO, error) {
 	user, err := service.userRepository.FetchSpecSuperAdmin(uuid)

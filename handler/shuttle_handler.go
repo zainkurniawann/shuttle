@@ -67,7 +67,27 @@ func (h *ShuttleHandler) GetAllShuttleByParent(c *fiber.Ctx) error {
     return c.Status(http.StatusOK).JSON(shuttles)
 }
 
+func (h *ShuttleHandler) GetAllShuttleByDriver(c *fiber.Ctx) error {
+    userUUID, ok := c.Locals("userUUID").(string)
+    if !ok || userUUID == "" {
+        return utils.BadRequestResponse(c, "Invalid or missing userUUID", nil)
+    }
+    
+    driverUUID, err := uuid.Parse(userUUID)
+    if err != nil {
+        return utils.BadRequestResponse(c, "Invalid userUUID format", nil)
+    }
+    
+    // Debug log
+    fmt.Println("ParentUUID:", driverUUID)
 
+    shuttles, err := h.ShuttleService.GetAllShuttleByDriver(driverUUID)
+    if err != nil {
+        return utils.NotFoundResponse(c, "Shuttle data not found", nil)
+    }
+
+    return c.Status(http.StatusOK).JSON(shuttles)
+}
 
 func (h *ShuttleHandler) GetSpecShuttle(c *fiber.Ctx) error {
 	shuttleUUIDParam := c.Params("id")
@@ -109,7 +129,7 @@ func (h *ShuttleHandler) AddShuttle(c *fiber.Ctx) error {
 	}
 
 	if shuttleReq.Status == "" {
-		shuttleReq.Status = "waiting"
+		shuttleReq.Status = "waiting_to_be_taken_to_school"
 	}
 
 	if err := utils.ValidateStruct(c, shuttleReq); err != nil {

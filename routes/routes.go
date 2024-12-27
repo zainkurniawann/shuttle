@@ -121,6 +121,12 @@ func Route(r *fiber.App, db *sqlx.DB) {
 	protectedSchoolAdmin.Post("/user/driver/add", userHandler.AddSchoolDriver)
 	protectedSchoolAdmin.Put("/user/driver/update/:id", userHandler.UpdateSchoolDriver)
 	protectedSchoolAdmin.Delete("/user/driver/delete/:id", userHandler.DeleteSchoolDriver)
+	
+	protectedSchoolAdmin.Get("/vehicle/all", vehicleHandler.GetAllVehicles)
+	protectedSchoolAdmin.Get("/vehicle/:id", vehicleHandler.GetSpecVehicle)
+	protectedSchoolAdmin.Post("/vehicle/add", vehicleHandler.AddVehicle)
+	protectedSchoolAdmin.Put("/vehicle/update/:id", vehicleHandler.UpdateVehicle)
+	protectedSchoolAdmin.Delete("/vehicle/delete/:id", vehicleHandler.DeleteVehicle)
 
 	// ROUTE FOR SCHOOL ADMIN
 	protectedSchoolAdmin.Get("/route/all", routeHandler.GetAllRoutes)
@@ -140,6 +146,7 @@ func Route(r *fiber.App, db *sqlx.DB) {
 	protectedParent.Get("/my/childern/:id", childernHandler.GetSpecChildern) //nih katanya butuh spec
 	protectedParent.Put("/my/childern/update/:id", childernHandler.UpdateChildern) //menu update nih tampling
 
+	protectedDriver.Get("/shuttle/all", shuttleHandler.GetAllShuttleByDriver)
 	protectedDriver.Post("/shuttle/add", shuttleHandler.AddShuttle)
 	protectedDriver.Get("/shuttle/:id", shuttleHandler.GetSpecShuttle)
 	protectedDriver.Put("/shuttle/update/:id", shuttleHandler.EditShuttle) 

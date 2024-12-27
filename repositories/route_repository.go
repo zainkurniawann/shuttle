@@ -127,13 +127,17 @@ func (repo *routeRepository) FetchAllRoutesByDriver(driverUUID string) ([]dto.Ro
 			s.student_last_name,
 			s.student_address,
 			s.student_pickup_point,
+			st.shuttle_uuid,
+			st.status AS shuttle_status,
 			sc.school_name,
 			sc.school_point
 		FROM route_jawa r
 		LEFT JOIN students s ON r.student_uuid = s.student_uuid
 		LEFT JOIN schools sc ON r.school_uuid = sc.school_uuid
+		LEFT JOIN shuttle st ON r.student_uuid = st.student_uuid AND DATE(st.created_at) = CURRENT_DATE
 		WHERE r.driver_uuid = $1
-	`
+		ORDER BY r.created_at ASC
+		`
 	var routes []dto.RouteResponseByDriverDTO
 	err := repo.DB.Select(&routes, query, driverUUID)
 	if err != nil {

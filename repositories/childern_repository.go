@@ -36,11 +36,8 @@ func (repositories *childernRepository) FetchAllChilderns(id string) ([]entity.S
         s.student_gender,
         s.student_grade,
         s.parent_uuid,
-        s.school_uuid,
-        st.status AS shuttle_status
+        s.school_uuid
     FROM students s
-    LEFT JOIN shuttle st 
-        ON s.student_uuid = st.student_uuid
     WHERE s.parent_uuid = $1
     `
 
@@ -61,7 +58,6 @@ func (repositories *childernRepository) FetchAllChilderns(id string) ([]entity.S
 			&childern.Grade,
 			&childern.ParentUUID,
 			&childern.SchoolUUID,
-			&childern.ShuttleStatus, // Tambahkan kolom ini
 		); err != nil {
 			return nil, err
 		}

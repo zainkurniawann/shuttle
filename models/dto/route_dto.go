@@ -1,5 +1,7 @@
 package dto
 
+import "database/sql"
+
 // type RoutePointRequestDTO struct {
 // 	PointName string  `json:"point_name" validate:"required"`
 // 	Order     int     `json:"point_order" validate:"required"`
@@ -16,31 +18,32 @@ type RouteRequestDTO struct {
 }
 
 type RouteResponseDTO struct {
-	RouteUUID		 string			`json:"route_uuid,omitempty"`
-	DriverUUID		 string			`json:"driver_uuid,omitempty"`
-	StudentUUID		 string			`json:"student_uuid,omitempty"`
-	SchoolUUID		 string			`json:"school_uuid,omitempty"`
-	RouteName        string         `json:"route_name,omitempty"`
-	RouteDescription string         `json:"route_description,omitempty"`
-	CreatedAt      	 string			`json:"created_at,omitempty"`
-	CreatedBy      	 string 		`json:"created_by,omitempty"`
-	UpdatedAt      	 string 		`json:"updated_at,omitempty"`
-	UpdatedBy      	 string 		`json:"updated_by,omitempty"`
+    RouteUUID        string 		`json:"route_uuid,omitempty" db:"route_uuid"`
+    DriverUUID       string 		`json:"driver_uuid,omitempty" db:"driver_uuid"`
+    StudentUUID      string 		`json:"student_uuid,omitempty" db:"student_uuid"`
+    SchoolUUID       string 		`json:"school_uuid,omitempty" db:"school_uuid"`
+	RouteName        string         `json:"route_name,omitempty" db:"route_name"`
+	RouteDescription string         `json:"route_description,omitempty" db:"route_description"`
+	CreatedAt      	 string			`json:"created_at,omitempty" db:"created_at"`
+	CreatedBy      	 string 		`json:"created_by,omitempty" db:"created_by"`
+	UpdatedAt      	 string 		`json:"updated_at,omitempty" db:"updated_at"`
+	UpdatedBy      	 string 		`json:"updated_by,omitempty" db:"updated_by"`
 }
 
 type RouteResponseByDriverDTO struct {
-    RouteUUID          string `db:"route_uuid"`
-    StudentUUID        string `db:"student_uuid"`
-    DriverUUID         string `db:"driver_uuid"`
-    SchoolUUID         string `db:"school_uuid"`
-    StudentFirstName   string `db:"student_first_name"`
-    StudentLastName    string `db:"student_last_name"`
-    StudentAddress     string `db:"student_address"`
-    StudentPickupPoint string `db:"student_pickup_point"`
-    SchoolName         string `db:"school_name"`
-    SchoolPoint        string `db:"school_point"`
+    RouteUUID          string `json:"route_uuid,omitempty" db:"route_uuid"`
+    StudentUUID        string `json:"student_uuid,omitempty" db:"student_uuid"`
+    DriverUUID         string `json:"driver_uuid,omitempty" db:"driver_uuid"`
+    SchoolUUID         string `json:"school_uuid,omitempty" db:"school_uuid"`
+    StudentFirstName   string `json:"student_first_name,omitempty" db:"student_first_name"`
+    StudentLastName    string `json:"student_last_name,omitempty" db:"student_last_name"`
+    StudentAddress     string `json:"student_address,omitempty" db:"student_address"`
+    StudentPickupPoint string `json:"student_pickup_point,omitempty" db:"student_pickup_point"`
+	ShuttleUUID        sql.NullString `db:"shuttle_uuid" json:"shuttle_uuid"`
+	ShuttleStatus      sql.NullString `db:"shuttle_status" json:"shuttle_status"`
+    SchoolName         string `json:"school_name,omitempty" db:"school_name"`
+    SchoolPoint        string `json:"school_point,omitempty" db:"school_point"`
 }
-
 
 
 

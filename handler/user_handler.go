@@ -3,6 +3,7 @@ package handler
 import (
 	"encoding/json"
 	"fmt"
+	// "log"
 	"strconv"
 
 	"shuttle/errors"
@@ -187,127 +188,128 @@ func (handler *userHandler) GetAllSchoolAdmin(c *fiber.Ctx) error {
 }
 
 func (handler *userHandler) GetAllPermittedDriver(c *fiber.Ctx) error {
-	role := c.Locals("role_code").(string)
+    role := c.Locals("role_code").(string)
 
-	page, err := strconv.Atoi(c.Query("page", "1"))
-	if err != nil || page < 1 {
-		return utils.BadRequestResponse(c, "Invalid page number", nil)
-	}
+    page, err := strconv.Atoi(c.Query("page", "1"))
+    if err != nil || page < 1 {
+        return utils.BadRequestResponse(c, "Invalid page number", nil)
+    }
 
-	limit, err := strconv.Atoi(c.Query("limit", "10"))
-	if err != nil || limit < 1 {
-		return utils.BadRequestResponse(c, "Invalid limit number", nil)
-	}
+    limit, err := strconv.Atoi(c.Query("limit", "10"))
+    if err != nil || limit < 1 {
+        return utils.BadRequestResponse(c, "Invalid limit number", nil)
+    }
 
-	sortField := c.Query("sort_by", "user_id")
-	sortDirection := c.Query("direction", "desc")
+    sortField := c.Query("sort_by", "user_id")
+    sortDirection := c.Query("direction", "desc")
 
-	if sortDirection != "asc" && sortDirection != "desc" {
-		return utils.BadRequestResponse(c, "Invalid sort direction, use 'asc' or 'desc'", nil)
-	}
+    if sortDirection != "asc" && sortDirection != "desc" {
+        return utils.BadRequestResponse(c, "Invalid sort direction, use 'asc' or 'desc'", nil)
+    }
 
-	if !isValidSortFieldForUsers(sortField) {
-		return utils.BadRequestResponse(c, "Invalid sort field", nil)
-	}
+    if !isValidSortFieldForUsers(sortField) {
+        return utils.BadRequestResponse(c, "Invalid sort field", nil)
+    }
 
-	switch role {
-	case "SA":
-		users, totalItems, err := handler.userService.GetAllDriverFromAllSchools(page, limit, sortField, sortDirection)
-		if err != nil {
-			logger.LogError(err, "Failed to fetch all drivers", nil)
-			return utils.InternalServerErrorResponse(c, "Something went wrong, please try again later", nil)
-		}
+    switch role {
+    case "SA":
+        users, totalItems, err := handler.userService.GetAllDriverFromAllSchools(page, limit, sortField, sortDirection)
+        if err != nil {
+            logger.LogError(err, "Failed to fetch all drivers", nil)
+            return utils.InternalServerErrorResponse(c, "Something went wrong, please try again later", nil)
+        }
 
-		totalPages := (totalItems + limit - 1) / limit
+        totalPages := (totalItems + limit - 1) / limit
+        if page > totalPages {
+            if totalItems > 0 {
+                return utils.BadRequestResponse(c, "Page number out of range", nil)
+            } else {
+                page = 1
+            }
+        }
 
-		if page > totalPages {
-			if totalItems > 0 {
-				return utils.BadRequestResponse(c, "Page number out of range", nil)
-			} else {
-				page = 1
-			}
-		}
+        start := (page-1)*limit + 1
+        if totalItems == 0 || start > totalItems {
+            start = 0
+        }
 
-		start := (page-1)*limit + 1
-		if totalItems == 0 || start > totalItems {
-			start = 0
-		}
+        end := start + len(users) - 1
+        if end > totalItems {
+            end = totalItems
+        }
 
-		end := start + len(users) - 1
-		if end > totalItems {
-			end = totalItems
-		}
+        if len(users) == 0 {
+            start = 0
+            end = 0
+        }
 
-		if len(users) == 0 {
-			start = 0
-			end = 0
-		}
+        response := fiber.Map{
+            "data": users,
+            "meta": fiber.Map{
+                "current_page":   page,
+                "total_pages":    totalPages,
+                "per_page_items": limit,
+                "total_items":    totalItems,
+                "showing":        fmt.Sprintf("Showing %d-%d of %d", start, end, totalItems),
+            },
+        }
 
-		response := fiber.Map{
-			"data": users,
-			"meta": fiber.Map{
-				"current_page":   page,
-				"total_pages":    totalPages,
-				"per_page_items": limit,
-				"total_items":    totalItems,
-				"showing":        fmt.Sprintf("Showing %d-%d of %d", start, end, totalItems),
-			},
-		}
+        return utils.SuccessResponse(c, "Users fetched successfully", response)
 
-		return utils.SuccessResponse(c, "Users fetched successfully", response)
-	case "AS":
-		schoolUUID, ok := c.Locals("schoolUUID").(string)
-		if !ok {
-			return utils.BadRequestResponse(c, "Token is invalid", nil)
-		}
+    case "AS":
+        schoolUUID, ok := c.Locals("schoolUUID").(string)
+        if !ok {
+            return utils.BadRequestResponse(c, "Token is invalid", nil)
+        }
 
-		users, totalItems, err := handler.userService.GetAllDriverForPermittedSchool(page, limit, sortField, sortDirection, schoolUUID)
-		if err != nil {
-			logger.LogError(err, "Failed to fetch all drivers", nil)
-			return utils.InternalServerErrorResponse(c, "Something went wrong, please try again later", nil)
-		}
+        users, totalItems, err := handler.userService.GetAllDriverForPermittedSchool(page, limit, sortField, sortDirection, schoolUUID)
+        if err != nil {
+            logger.LogError(err, "Failed to fetch all drivers", nil)
+            return utils.InternalServerErrorResponse(c, "Something went wrong, please try again later", nil)
+        }
 
-		totalPages := (totalItems + limit - 1) / limit
+        totalPages := (totalItems + limit - 1) / limit
+        if page > totalPages {
+            if totalItems > 0 {
+                return utils.BadRequestResponse(c, "Page number out of range", nil)
+            } else {
+                page = 1
+            }
+        }
 
-		if page > totalPages {
-			if totalItems > 0 {
-				return utils.BadRequestResponse(c, "Page number out of range", nil)
-			} else {
-				page = 1
-			}
-		}
+        start := (page-1)*limit + 1
+        if totalItems == 0 || start > totalItems {
+            start = 0
+        }
 
-		start := (page-1)*limit + 1
-		if totalItems == 0 || start > totalItems {
-			start = 0
-		}
+        end := start + len(users) - 1
+        if end > totalItems {
+            end = totalItems
+        }
 
-		end := start + len(users) - 1
-		if end > totalItems {
-			end = totalItems
-		}
+        if len(users) == 0 {
+            start = 0
+            end = 0
+        }
 
-		if len(users) == 0 {
-			start = 0
-			end = 0
-		}
+        response := fiber.Map{
+            "data": users,
+            "meta": fiber.Map{
+                "current_page":   page,
+                "total_pages":    totalPages,
+                "per_page_items": limit,
+                "total_items":    totalItems,
+                "showing":        fmt.Sprintf("Showing %d-%d of %d", start, end, totalItems),
+            },
+        }
 
-		response := fiber.Map{
-			"data": users,
-			"meta": fiber.Map{
-				"current_page":   page,
-				"total_pages":    totalPages,
-				"per_page_items": limit,
-				"total_items":    totalItems,
-				"showing":        fmt.Sprintf("Showing %d-%d of %d", start, end, totalItems),
-			},
-		}
+        return utils.SuccessResponse(c, "Users fetched successfully", response)
 
-		return utils.SuccessResponse(c, "Users fetched successfully", response)
-	default:
-		return utils.BadRequestResponse(c, "Invalid role", nil)
-	}
+    default:
+        return utils.BadRequestResponse(c, "Invalid role", nil)
+    }
 }
+
 
 func (handler *userHandler) GetSpecPermittedDriver(c *fiber.Ctx) error {
 	id := c.Params("id")

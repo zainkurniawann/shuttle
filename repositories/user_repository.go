@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	// "log"
 	"shuttle/models/entity"
 
 	"github.com/google/uuid"
@@ -199,19 +200,35 @@ func (r *userRepository) FetchSpecDriverForPermittedSchool(userUUID, schoolUUID 
 }
 
 func (r *userRepository) CountAllPermittedDriver(schoolUUID string) (int, error) {
-	query := `SELECT COUNT(user_id) FROM users WHERE user_role = 'driver' AND deleted_at IS NULL`
-	if schoolUUID != "" {
-		query += ` AND user_uuid IN (SELECT user_uuid FROM driver_details WHERE school_uuid = $1)`
-	}
+    // Mulai dengan query dasar
+    query := `SELECT COUNT(user_id) FROM users WHERE user_role = 'driver' AND deleted_at IS NULL`
 
-	var total int
-	err := r.DB.Get(&total, query, schoolUUID)
-	if err != nil {
-		return 0, err
-	}
+    // Jika schoolUUID tidak kosong, tambahkan filter untuk schoolUUID
+    if schoolUUID != "" {
+        query += ` AND user_uuid IN (SELECT user_uuid FROM driver_details WHERE school_uuid = $1)`
+    }
 
-	return total, nil
+    // Variabel untuk menyimpan hasil
+    var total int
+
+    // Menjalankan query tanpa parameter yang tidak perlu
+    if schoolUUID != "" {
+        // Jika schoolUUID ada, berikan parameter
+        err := r.DB.Get(&total, query, schoolUUID)
+        if err != nil {
+            return 0, err
+        }
+    } else {
+        // Jika schoolUUID kosong, jalankan query tanpa parameter
+        err := r.DB.Get(&total, query)
+        if err != nil {
+            return 0, err
+        }
+    }
+
+    return total, nil
 }
+
 
 func (r *userRepository) FetchPermittedSchoolAccess(userUUID string) (string, error) {
 	query := `
@@ -446,13 +463,13 @@ func (r *userRepository) FetchAllSchoolAdmins(offset int, limit int, sortField s
 }
 
 func (r *userRepository) FetchAllDrivers(offset int, limit int, sortField string, sortDirection string) ([]entity.User, entity.School, entity.Vehicle, error) {
-	var users []entity.User
-	var user entity.User
-	var details entity.DriverDetails
-	var school entity.School
-	var vehicle entity.Vehicle
+    var users []entity.User
+    var user entity.User
+    var details entity.DriverDetails
+    var school entity.School
+    var vehicle entity.Vehicle
 
-	query := fmt.Sprintf(`
+    query := fmt.Sprintf(`
         SELECT
             u.user_uuid, u.user_username, u.user_email, u.user_status, u.user_last_active, u.created_at, u.created_by,
             d.school_uuid, d.vehicle_uuid, d.user_picture, d.user_first_name, d.user_last_name, d.user_gender, d.user_phone, d.user_address, d.user_license_number,
@@ -489,34 +506,35 @@ func (r *userRepository) FetchAllDrivers(offset int, limit int, sortField string
         LIMIT $1 OFFSET $2
     `, sortField, sortDirection)
 
-	rows, err := r.DB.Queryx(query, limit, offset)
-	if err != nil {
-		return nil, entity.School{}, entity.Vehicle{}, err
-	}
-	defer rows.Close()
+    rows, err := r.DB.Queryx(query, limit, offset)
+    if err != nil {
+        return nil, entity.School{}, entity.Vehicle{}, err
+    }
+    defer rows.Close()
 
-	for rows.Next() {
-		err := rows.Scan(
-			&user.UUID, &user.Username, &user.Email, &user.Status, &user.LastActive, &user.CreatedAt, &user.CreatedBy,
-			&details.SchoolUUID, &details.VehicleUUID, &details.Picture, &details.FirstName, &details.LastName,
-			&details.Gender, &details.Phone, &details.Address, &details.LicenseNumber,
-			&school.Name, &vehicle.UUID, &vehicle.VehicleNumber, &vehicle.VehicleName,
-		)
-		if err != nil {
-			return nil, entity.School{}, entity.Vehicle{}, err
-		}
+    for rows.Next() {
+        err := rows.Scan(
+            &user.UUID, &user.Username, &user.Email, &user.Status, &user.LastActive, &user.CreatedAt, &user.CreatedBy,
+            &details.SchoolUUID, &details.VehicleUUID, &details.Picture, &details.FirstName, &details.LastName,
+            &details.Gender, &details.Phone, &details.Address, &details.LicenseNumber,
+            &school.Name, &vehicle.UUID, &vehicle.VehicleNumber, &vehicle.VehicleName,
+        )
+        if err != nil {
+            return nil, entity.School{}, entity.Vehicle{}, err
+        }
 
-		detailsJSON, err := json.Marshal(details)
-		if err != nil {
-			return nil, entity.School{}, entity.Vehicle{}, fmt.Errorf("error marshaling driver details: %w", err)
-		}
+        detailsJSON, err := json.Marshal(details)
+        if err != nil {
+            return nil, entity.School{}, entity.Vehicle{}, fmt.Errorf("error marshaling driver details: %w", err)
+        }
 
-		user.DetailsJSON = detailsJSON
-		users = append(users, user)
-	}
+        user.DetailsJSON = detailsJSON
+        users = append(users, user)
+    }
 
-	return users, school, vehicle, nil
+    return users, school, vehicle, nil
 }
+
 
 func (r *userRepository) FetchSpecDriverFromAllSchools(userUUID string) (entity.User, entity.School, entity.Vehicle, error) {
 	var user entity.User

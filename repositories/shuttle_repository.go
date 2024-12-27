@@ -14,6 +14,7 @@ import (
 type ShuttleRepositoryInterface interface {
     FetchShuttleTrackByParent(parentUUID uuid.UUID) ([]dto.ShuttleResponse, error)
 	FetchAllShuttleByParent(parentUUID uuid.UUID) ([]dto.ShuttleAllResponse, error)
+	FetchAllShuttleByDriver(driverUUID uuid.UUID) ([]dto.ShuttleAllResponse, error)
 	GetSpecShuttle(shuttleUUID uuid.UUID) ([]dto.ShuttleSpecResponse, error)
     SaveShuttle(shuttle entity.Shuttle) error
 	UpdateShuttleStatus(shuttleUUID uuid.UUID, status string) error
@@ -89,7 +90,35 @@ func (r *ShuttleRepository) FetchAllShuttleByParent(parentUUID uuid.UUID) ([]dto
 	return shuttles, nil
 }
 
+func (r *ShuttleRepository) FetchAllShuttleByDriver(driverUUID uuid.UUID) ([]dto.ShuttleAllResponse, error) {
+	query := `
+		SELECT
+			st.student_uuid,
+			st.status,
+			s.student_first_name,
+			s.student_last_name,
+			s.student_grade,
+			s.student_gender,
+			s.parent_uuid,
+			s.school_uuid,
+			sc.school_name,
+			st.created_at,
+			COALESCE(st.updated_at::TEXT, 'N/A') AS updated_at
+		FROM shuttle st
+		LEFT JOIN students s
+			ON st.student_uuid = s.student_uuid
+		LEFT JOIN schools sc 
+			ON s.school_uuid = sc.school_uuid
+		WHERE st.driver_uuid = $1
+	`
+	var shuttles []dto.ShuttleAllResponse
+	err := r.DB.Select(&shuttles, query, driverUUID)
+	if err != nil {
+		return nil, err
+	}
 
+	return shuttles, nil
+}
 
 func (r *ShuttleRepository) GetSpecShuttle(shuttleUUID uuid.UUID) ([]dto.ShuttleSpecResponse, error) {
 	query := `
