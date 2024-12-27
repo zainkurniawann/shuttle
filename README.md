@@ -5,8 +5,8 @@
 - [Postgres](https://www.postgresql.org/)
 
 ## .env
-Config your .env
-copy .env.example --> paste --> rename to .env --> than ramaikan lalu 😂🤦🏿‍♂️ 
+first you have to config your .env😂 || 
+copy .env.example --> paste --> rename to .env --> next, ramaikan lalu 😂🤦🏿‍♂️ 
 
 ## 😂Databases😹  
 ```sh
