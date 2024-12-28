@@ -455,10 +455,17 @@ func (service *UserService) GetSpecDriverFromAllSchools(id string) (dto.UserResp
 }
 
 func (service *UserService) GetSpecDriverForPermittedSchool(driverUUID string, schoolUUID string) (dto.UserResponseDTO, error) {
+	log.Println("Fetching spec driver for school...")
+	log.Printf("Driver UUID: %s, School UUID: %s", driverUUID, schoolUUID)
+	
 	user, school, vehicle, err := service.userRepository.FetchSpecDriverForPermittedSchool(driverUUID, schoolUUID)
 	if err != nil {
+		log.Println("Error fetching driver data:", err)
 		return dto.UserResponseDTO{}, err
 	}
+
+	log.Println("User data fetched:")
+	log.Printf("User UUID: %s, Username: %s, Email: %s", user.UUID, user.Username, user.Email)
 
 	userDTO := dto.UserResponseDTO{
 		UUID:       user.UUID.String(),
@@ -472,10 +479,13 @@ func (service *UserService) GetSpecDriverForPermittedSchool(driverUUID string, s
 		UpdatedBy:  safeStringFormat(user.UpdatedBy),
 	}
 
+	log.Println("Driver details fetched:")
 	driverDetails, err := service.userRepository.FetchDriverDetails(user.UUID)
 	if err != nil {
+		log.Println("Error fetching driver details:", err)
 		return dto.UserResponseDTO{}, err
 	}
+	log.Printf("First Name: %s, Last Name: %s, Phone: %s", driverDetails.FirstName, driverDetails.LastName, driverDetails.Phone)
 
 	var vehicleDetails, vehicleUUID string
 	if vehicle.VehicleNumber == "N/A" || vehicle.UUID == uuid.Nil {
@@ -490,7 +500,8 @@ func (service *UserService) GetSpecDriverForPermittedSchool(driverUUID string, s
 		vehicleUUID = vehicle.UUID.String()
 	}
 
-	detailsJSON, err := json.Marshal(dto.DriverDetailsResponseDTO{
+	// Marshal details into JSON
+	driverDetailsJSON, err := json.Marshal(dto.DriverDetailsResponseDTO{
 		SchoolUUID:    schoolUUID,
 		SchoolName:    school.Name,
 		VehicleUUID:   vehicleUUID,
@@ -498,16 +509,28 @@ func (service *UserService) GetSpecDriverForPermittedSchool(driverUUID string, s
 		Picture:       driverDetails.Picture,
 		FirstName:     driverDetails.FirstName,
 		LastName:      driverDetails.LastName,
-		Gender: 	  dto.Gender(driverDetails.Gender),
+		Gender:        dto.Gender(driverDetails.Gender),
 		Phone:         driverDetails.Phone,
 		Address:       driverDetails.Address,
 		LicenseNumber: driverDetails.LicenseNumber,
 	})
 	if err != nil {
+		log.Println("Error marshaling driver details:", err)
 		return dto.UserResponseDTO{}, err
 	}
 
-	userDTO.Details = detailsJSON
+	// Log the JSON in readable format
+	prettyJSON, err := json.MarshalIndent(driverDetailsJSON, "", "  ")
+	if err != nil {
+		log.Println("Error pretty-printing driver details JSON:", err)
+		return dto.UserResponseDTO{}, err
+	}
+	log.Printf("Driver Details JSON: %s", string(prettyJSON))
+
+	userDTO.Details = driverDetailsJSON
+
+	// Log the final DTO
+	log.Printf("Final User DTO: %+v", userDTO)
 
 	return userDTO, nil
 }
