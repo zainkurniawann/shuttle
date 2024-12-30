@@ -4,6 +4,8 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"log"
+
 	// "log"
 	"shuttle/models/entity"
 
@@ -179,6 +181,7 @@ func (r *userRepository) FetchSpecDriverForPermittedSchool(userUUID, schoolUUID 
 		LEFT JOIN vehicles v ON d.vehicle_uuid = v.vehicle_uuid
 		WHERE u.user_role = 'driver' AND u.deleted_at IS NULL AND u.user_uuid = $1 AND d.school_uuid = $2
 	`
+	log.Printf("Vehicle UUID: %s", vehicle.UUID)
 
 	err := r.DB.QueryRowx(query, userUUID, schoolUUID).Scan(
 		&user.UUID, &user.Username, &user.Email, &user.Status, &user.LastActive, &user.CreatedAt, &user.CreatedBy, &user.UpdatedAt, &user.UpdatedBy,
@@ -189,6 +192,7 @@ func (r *userRepository) FetchSpecDriverForPermittedSchool(userUUID, schoolUUID 
 	if err != nil {
 		return user, school, vehicle, err
 	}
+	log.Printf("Fetched data: SchoolUUID: %s, VehicleUUID: %s, VehicleNumber: %s", details.SchoolUUID, details.VehicleUUID, vehicle.VehicleNumber)
 
 	detailsJSON, err := json.Marshal(details)
 	if err != nil {

@@ -191,8 +191,12 @@ func (handler *routeHandler) AddRoute(c *fiber.Ctx) error {
 	log.Println("Validation passed")
 
 	// Panggil service untuk menambahkan route
-	if err := handler.routeService.AddRoute(*route, schoolUUIDStr, username); err != nil {
+	err := handler.routeService.AddRoute(*route, schoolUUIDStr, username)
+	if err != nil {
 		log.Printf("Error adding route: %v", err)
+		if err.Error() == "Student already assigned to a route in this school" {
+			return utils.BadRequestResponse(c, err.Error(), nil)
+		}
 		return utils.InternalServerErrorResponse(c, err.Error(), nil)
 	}
 	log.Println("Route added successfully")

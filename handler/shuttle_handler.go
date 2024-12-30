@@ -27,21 +27,29 @@ func NewShuttleHandler(shuttleService services.ShuttleServiceInterface) *Shuttle
 }
 
 func (h *ShuttleHandler) GetShuttleTrackByParent(c *fiber.Ctx) error {
+	// Ambil userUUID dari context
 	userUUID, ok := c.Locals("userUUID").(string)
 	if !ok || userUUID == "" {
 		return utils.BadRequestResponse(c, "Invalid or missing userUUID", nil)
 	}
 
+	// Parse userUUID ke dalam UUID format
 	parentUUID, err := uuid.Parse(userUUID)
 	if err != nil {
 		return utils.BadRequestResponse(c, "Invalid userUUID format", nil)
 	}
 
-	shuttles, err := h.ShuttleService.GetShuttleTrackByParent(parentUUID)
+	// Ambil status dan interval dari query string
+	status := c.Query("status", "menuju sekolah") // Nilai default: "menuju sekolah"
+	interval := c.Query("interval", "1 MINUTE")   // Nilai default: "1 MINUTE"
+
+	// Panggil service dengan parameter tambahan
+	shuttles, err := h.ShuttleService.GetShuttleTrackByParent(parentUUID, status, interval)
 	if err != nil {
 		return utils.NotFoundResponse(c, "Shuttle data not found", nil)
 	}
 
+	// Kirim response
 	return c.Status(http.StatusOK).JSON(shuttles)
 }
 

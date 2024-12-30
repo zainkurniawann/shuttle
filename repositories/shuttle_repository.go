@@ -12,7 +12,7 @@ import (
 )
 
 type ShuttleRepositoryInterface interface {
-    FetchShuttleTrackByParent(parentUUID uuid.UUID) ([]dto.ShuttleResponse, error)
+    FetchShuttleTrackByParent(status string, interval string) ([]dto.ShuttleResponse, error)
 	FetchAllShuttleByParent(parentUUID uuid.UUID) ([]dto.ShuttleAllResponse, error)
 	FetchAllShuttleByDriver(driverUUID uuid.UUID) ([]dto.ShuttleAllResponse, error)
 	GetSpecShuttle(shuttleUUID uuid.UUID) ([]dto.ShuttleSpecResponse, error)
@@ -30,7 +30,7 @@ func NewShuttleRepository(DB *sqlx.DB) ShuttleRepositoryInterface {
 	}
 }
 
-func (r *ShuttleRepository) FetchShuttleTrackByParent(parentUUID uuid.UUID) ([]dto.ShuttleResponse, error) {
+func (r *ShuttleRepository) FetchShuttleTrackByParent(status string, interval string) ([]dto.ShuttleResponse, error) {
 	query := `
 		SELECT 
 			st.student_uuid,
@@ -41,28 +41,28 @@ func (r *ShuttleRepository) FetchShuttleTrackByParent(parentUUID uuid.UUID) ([]d
 			s.school_uuid,
 			sc.school_name,
 			st.status AS shuttle_status,
-			st.created_at,
-			CURRENT_DATE AS current_date
+			st.created_at
 		FROM shuttle st
 		LEFT JOIN students s 
-			ON s.student_uuid = st.student_uuid AND DATE(st.created_at) = CURRENT_DATE
+			ON s.student_uuid = st.student_uuid
 		JOIN schools sc 
 			ON s.school_uuid = sc.school_uuid
-		WHERE s.parent_uuid = $1
+		WHERE st.status = $1 AND st.created_at >= NOW() - INTERVAL $2
 	`
 
 	var shuttles []dto.ShuttleResponse
-	err := r.DB.Select(&shuttles, query, parentUUID)
+	err := r.DB.Select(&shuttles, query, status, interval)
 	if err != nil {
 		return nil, err
 	}
-	
+
 	return shuttles, nil
 }
 
 func (r *ShuttleRepository) FetchAllShuttleByParent(parentUUID uuid.UUID) ([]dto.ShuttleAllResponse, error) {
 	query := `
 		SELECT
+			st.shuttle_uuid,
 			st.student_uuid,
 			st.status,
 			s.student_first_name,
@@ -93,6 +93,7 @@ func (r *ShuttleRepository) FetchAllShuttleByParent(parentUUID uuid.UUID) ([]dto
 func (r *ShuttleRepository) FetchAllShuttleByDriver(driverUUID uuid.UUID) ([]dto.ShuttleAllResponse, error) {
 	query := `
 		SELECT
+			st.shuttle_uuid,
 			st.student_uuid,
 			st.status,
 			s.student_first_name,

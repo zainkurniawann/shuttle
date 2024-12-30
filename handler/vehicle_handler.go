@@ -33,70 +33,93 @@ func NewVehicleHttpHandler(vehicleService services.VehicleService) VehicleHandle
 }
 
 func (handler *vehicleHandler) GetAllVehicles(c *fiber.Ctx) error {
-	page, err := strconv.Atoi(c.Query("page", "1"))
-	if err != nil || page < 1 {
-		return utils.BadRequestResponse(c, "Invalid page number", nil)
-	}
+    role := c.Locals("role_code").(string)
+    
+    // Ambil schoolUUID dari context
+    schoolUUID, ok := c.Locals("schoolUUID").(string)
+    if !ok {
+        return utils.BadRequestResponse(c, "Invalid token or schoolUUID", nil)
+    }
 
-	limit, err := strconv.Atoi(c.Query("limit", "10"))
-	if err != nil || limit < 1 {
-		return utils.BadRequestResponse(c, "Invalid limit number", nil)
-	}
+    // Ambil page, limit, sortField, dan sortDirection dari query
+    page, err := strconv.Atoi(c.Query("page", "1"))
+    if err != nil || page < 1 {
+        return utils.BadRequestResponse(c, "Invalid page number", nil)
+    }
 
-	sortField := c.Query("sort_by", "vehicle_id")
-	sortDirection := c.Query("direction", "asc")
+    limit, err := strconv.Atoi(c.Query("limit", "10"))
+    if err != nil || limit < 1 {
+        return utils.BadRequestResponse(c, "Invalid limit number", nil)
+    }
 
-	if sortDirection != "asc" && sortDirection != "desc" {
-		return utils.BadRequestResponse(c, "Invalid sort direction, use 'asc' or 'desc'", nil)
-	}
+    sortField := c.Query("sort_by", "vehicle_id")
+    sortDirection := c.Query("direction", "asc")
 
-	if !isValidSortFieldForVehicles(sortField) {
-		return utils.BadRequestResponse(c, "Invalid sort field", nil)
-	}
+    if sortDirection != "asc" && sortDirection != "desc" {
+        return utils.BadRequestResponse(c, "Invalid sort direction, use 'asc' or 'desc'", nil)
+    }
 
-	vehicles, totalItems, err := handler.vehicleService.GetAllVehicles(page, limit, sortField, sortDirection)
-	if err != nil {
-		logger.LogError(err, "Failed to fetch paginated vehicle", nil)
-		return utils.InternalServerErrorResponse(c, "Something went wrong, please try again later", nil)
-	}
+    if !isValidSortFieldForVehicles(sortField) {
+        return utils.BadRequestResponse(c, "Invalid sort field", nil)
+    }
 
-	totalPages := (totalItems + limit - 1) / limit
+    var vehicles []dto.VehicleResponseDTO
+    var totalItems int
 
-	if page > totalPages {
-		if totalItems > 0 {
-			return utils.BadRequestResponse(c, "Page number out of range", nil)
-		} else {
-			page = 1
-		}
-	}
+    switch role {
+    case "SA": // Super Admin
+        vehicles, totalItems, err = handler.vehicleService.GetAllVehicles(page, limit, sortField, sortDirection)
+        if err != nil {
+            logger.LogError(err, "Failed to fetch vehicles for Super Admin", nil)
+            return utils.InternalServerErrorResponse(c, "Something went wrong, please try again later", nil)
+        }
+    case "AS": // Admin Sekolah
+        vehicles, totalItems, err = handler.vehicleService.GetAllVehiclesForSchool(page, limit, sortField, sortDirection, schoolUUID)
+        if err != nil {
+            logger.LogError(err, "Failed to fetch vehicles for Admin School", nil)
+            return utils.InternalServerErrorResponse(c, "Something went wrong, please try again later", nil)
+        }
+    default:
+        return utils.BadRequestResponse(c, "Invalid role", nil)
+    }
 
-	start := (page-1)*limit + 1
-	if totalItems == 0 || start > totalItems {
-		start = 0
-	}
+    // Hitung total halaman
+    totalPages := (totalItems + limit - 1) / limit
+    if page > totalPages {
+        if totalItems > 0 {
+            return utils.BadRequestResponse(c, "Page number out of range", nil)
+        } else {
+            page = 1
+        }
+    }
 
-	end := start + len(vehicles) - 1
-	if end > totalItems {
-		end = totalItems
-	}
+    start := (page-1)*limit + 1
+    if totalItems == 0 || start > totalItems {
+        start = 0
+    }
 
-	if len(vehicles) == 0 {
-		start = 0
-		end = 0
-	}
+    end := start + len(vehicles) - 1
+    if end > totalItems {
+        end = totalItems
+    }
 
-	response := fiber.Map{
-		"data": vehicles,
-		"meta": fiber.Map{
-			"current_page":   page,
-			"total_pages":    totalPages,
-			"per_page_items": limit,
-			"total_items":    totalItems,
-			"showing":        fmt.Sprintf("Showing %d-%d of %d", start, end, totalItems),
-		},
-	}
+    if len(vehicles) == 0 {
+        start = 0
+        end = 0
+    }
 
-	return utils.SuccessResponse(c, "Vehicles fetched successfully", response)
+    response := fiber.Map{
+        "data": vehicles,
+        "meta": fiber.Map{
+            "current_page":   page,
+            "total_pages":    totalPages,
+            "per_page_items": limit,
+            "total_items":    totalItems,
+            "showing":        fmt.Sprintf("Showing %d-%d of %d", start, end, totalItems),
+        },
+    }
+
+    return utils.SuccessResponse(c, "Vehicles fetched successfully", response)
 }
 
 func (handler *vehicleHandler) GetSpecVehicle(c *fiber.Ctx) error {

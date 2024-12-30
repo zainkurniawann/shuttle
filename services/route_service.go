@@ -4,7 +4,7 @@ import (
 	"database/sql"
 	"fmt"
 	"log"
-	"shuttle/errors"
+	// "shuttle/errors"
 	"shuttle/models/dto"
 	"shuttle/models/entity"
 	"shuttle/repositories"
@@ -144,7 +144,6 @@ func (service *routeService) GetSpecRouteByDriver(driverUUID, studentUUID string
 	return route, nil
 }
 
-
 func (service *routeService) AddRoute(route dto.RouteRequestDTO, schoolUUID, username string) error {
 	log.Println("Starting AddRoute service")
 
@@ -161,6 +160,16 @@ func (service *routeService) AddRoute(route dto.RouteRequestDTO, schoolUUID, use
 		CreatedBy:        sql.NullString{String: username, Valid: true},
 	}
 
+	// Cek apakah student sudah memiliki route yang sama
+	existingRoute, err := service.routeRepository.GetRouteByStudentAndSchool(routeEntity.StudentUUID.String(), routeEntity.SchoolUUID.String())
+	if err != nil {
+		log.Printf("Error checking existing route: %v", err)
+		return fmt.Errorf("failed to check existing route: %w", err)
+	}
+	if existingRoute != nil {
+		return fmt.Errorf("Student already assigned to a route in this school")
+	}
+
 	// Log entitas route yang akan disimpan
 	log.Printf("Route entity to be saved: %+v", routeEntity)
 
@@ -168,7 +177,7 @@ func (service *routeService) AddRoute(route dto.RouteRequestDTO, schoolUUID, use
 	log.Println("Calling repository to add route")
 	if err := service.routeRepository.AddRoute(routeEntity); err != nil {
 		log.Printf("Failed to add route: %v", err)
-		return errors.New("Failed to add route", 500)
+		return fmt.Errorf("failed to add route: %w", err)
 	}
 
 	log.Println("Route added successfully")

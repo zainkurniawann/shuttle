@@ -10,10 +10,12 @@ import (
 
 type VehicleRepositoryInterface interface {
 	CountVehicles() (int, error)
+	CountVehiclesForSchool(schoolUUID string) (int, error)
 	CheckVehicleNumberExists(uuid ,vehicleNumber string) (bool, error)
 
 	FetchAllVehicles(offset, limit int, sortField, sortDirection string) ([]entity.Vehicle, map[string]entity.School, map[string]entity.DriverDetails, error)
 	FetchSpecVehicle(uuid string) (entity.Vehicle, entity.School, entity.DriverDetails, error)
+	FetchAllVehiclesForSchool(offset, limit int, sortField, sortDirection, schoolUUID string) ([]entity.Vehicle, map[string]entity.School, map[string]entity.DriverDetails, error)
 
 	SaveVehicle(vehicle entity.Vehicle) error
 	UpdateVehicle(vehicle entity.Vehicle) error
@@ -40,6 +42,24 @@ func (repository *VehicleRepository) CountVehicles() (int, error) {
 	`
 
 	if err := repository.db.Get(&count, query); err != nil {
+		return 0, err
+	}
+
+	return count, nil
+}
+
+func (repository *VehicleRepository) CountVehiclesForSchool(schoolUUID string) (int, error) {
+	var count int
+
+	// Menggunakan schoolUUID sebagai parameter untuk menghitung kendaraan berdasarkan sekolah tertentu
+	query := `
+		SELECT COUNT(vehicle_id)
+		FROM vehicles
+		WHERE school_uuid = $1 AND deleted_at IS NULL
+	`
+
+	// Mengambil data count berdasarkan query
+	if err := repository.db.Get(&count, query, schoolUUID); err != nil {
 		return 0, err
 	}
 
@@ -125,6 +145,91 @@ func (repository *VehicleRepository) FetchAllVehicles(offset, limit int, sortFie
     }
     defer rows.Close()
 
+    for rows.Next() {
+        var vehicle entity.Vehicle
+        var school entity.School
+		var driver entity.DriverDetails
+
+        err := rows.Scan(
+            &vehicle.UUID, &vehicle.SchoolUUID, &vehicle.DriverUUID, &vehicle.VehicleName, &vehicle.VehicleNumber,
+            &vehicle.VehicleType, &vehicle.VehicleColor, &vehicle.VehicleSeats, &vehicle.VehicleStatus,
+            &vehicle.CreatedAt, &school.UUID, &school.Name, &driver.UserUUID, &driver.FirstName, &driver.LastName,
+        )
+        if err != nil {
+            return nil, nil, nil, err
+        }
+
+        vehicles = append(vehicles, vehicle)
+		if vehicle.SchoolUUID != nil && *vehicle.SchoolUUID != uuid.Nil {
+			schoolsMap[vehicle.SchoolUUID.String()] = school
+		}
+		if vehicle.DriverUUID != nil && *vehicle.DriverUUID != uuid.Nil {
+			driversMap[vehicle.DriverUUID.String()] = driver
+		}
+    }
+
+    return vehicles, schoolsMap, driversMap, nil
+}
+
+func (repository *VehicleRepository) FetchAllVehiclesForSchool(offset, limit int, sortField, sortDirection, schoolUUID string) ([]entity.Vehicle, map[string]entity.School, map[string]entity.DriverDetails, error) {
+    var vehicles []entity.Vehicle
+    var schoolsMap = make(map[string]entity.School)
+	var driversMap = make(map[string]entity.DriverDetails)
+
+    // Mengubah query untuk menyertakan schoolUUID
+    query := fmt.Sprintf(`
+        SELECT 
+            v.vehicle_uuid, v.school_uuid, COALESCE(v.driver_uuid, NULL) AS driver_uuid,
+			v.vehicle_name, v.vehicle_number, 
+            v.vehicle_type, v.vehicle_color, v.vehicle_seats, v.vehicle_status, 
+            v.created_at, 
+			COALESCE(
+				CASE
+					WHEN s.deleted_at IS NULL THEN s.school_uuid
+				END, 
+				NULL
+			) AS school_uuid,
+			COALESCE(
+				CASE
+					WHEN s.deleted_at IS NULL THEN s.school_name
+				END,
+				'N/A'
+			) AS school_name,
+			COALESCE(
+				CASE
+					WHEN u.deleted_at IS NULL THEN d.user_uuid
+				END,
+				NULL
+			) AS driver_uuid,
+			COALESCE(
+				CASE
+					WHEN u.deleted_at IS NULL THEN d.user_first_name
+				END,
+				'N/A'
+			) AS driver_first_name,
+			COALESCE(
+				CASE
+					WHEN u.deleted_at IS NULL THEN d.user_last_name
+				END,
+				'N/A'
+			) AS driver_last_name
+        FROM vehicles v
+        LEFT JOIN schools s ON v.school_uuid = s.school_uuid
+		LEFT JOIN driver_details d ON v.driver_uuid = d.user_uuid
+		LEFT JOIN users u ON d.user_uuid = u.user_uuid
+        WHERE v.school_uuid = $1 AND v.deleted_at IS NULL
+        ORDER BY %s %s
+        LIMIT $2 OFFSET $3
+    `, sortField, sortDirection)
+
+    // Menggunakan schoolUUID sebagai parameter pertama dalam query
+    rows, err := repository.db.Queryx(query, schoolUUID, limit, offset)
+    if err != nil {
+        return nil, nil, nil, err
+    }
+    defer rows.Close()
+
+    // Proses hasil query
     for rows.Next() {
         var vehicle entity.Vehicle
         var school entity.School

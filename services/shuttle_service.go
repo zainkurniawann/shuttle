@@ -12,7 +12,7 @@ import (
 )
 
 type ShuttleServiceInterface interface {
-	GetShuttleTrackByParent(parentUUID uuid.UUID) ([]dto.ShuttleResponse, error)
+	GetShuttleTrackByParent(parentUUID uuid.UUID, status string, interval string) ([]dto.ShuttleResponse, error)
 	GetAllShuttleByParent(parentUUID uuid.UUID) ([]dto.ShuttleAllResponse, error)
 	GetAllShuttleByDriver(driverUUID uuid.UUID) ([]dto.ShuttleAllResponse, error)
 	GetSpecShuttle(shuttleUUID uuid.UUID) ([]dto.ShuttleSpecResponse, error)
@@ -30,15 +30,16 @@ func NewShuttleService(shuttleRepository repositories.ShuttleRepositoryInterface
 	}
 }
 
-func (s *ShuttleService) GetShuttleTrackByParent(parentUUID uuid.UUID) ([]dto.ShuttleResponse, error) {
-	shuttles, err := s.shuttleRepository.FetchShuttleTrackByParent(parentUUID)
+func (s *ShuttleService) GetShuttleTrackByParent(parentUUID uuid.UUID, status string, interval string) ([]dto.ShuttleResponse, error) {
+	// Panggil repository dengan parameter baru
+	shuttles, err := s.shuttleRepository.FetchShuttleTrackByParent(status, interval)
 	if err != nil {
 		return nil, err
 	}
 
 	responses := make([]dto.ShuttleResponse, 0, len(shuttles))
 	for _, shuttle := range shuttles {
-		response := &dto.ShuttleResponse{
+		response := dto.ShuttleResponse{
 			StudentUUID:    shuttle.StudentUUID,
 			ShuttleUUID:    shuttle.ShuttleUUID,
 			StudentName:    shuttle.StudentName,
@@ -50,11 +51,12 @@ func (s *ShuttleService) GetShuttleTrackByParent(parentUUID uuid.UUID) ([]dto.Sh
 			CreatedAt:      shuttle.CreatedAt,
 			CurrentDate:    shuttle.CurrentDate,
 		}
-		responses = append(responses, *response)
+		responses = append(responses, response)
 	}
 
 	return responses, nil
 }
+
 
 func (s *ShuttleService) GetAllShuttleByParent(parentUUID uuid.UUID) ([]dto.ShuttleAllResponse, error) {
 	// Fetch data from the repository
@@ -67,6 +69,7 @@ func (s *ShuttleService) GetAllShuttleByParent(parentUUID uuid.UUID) ([]dto.Shut
 	responses := make([]dto.ShuttleAllResponse, len(shuttles))
 	for i, shuttle := range shuttles {
 		responses[i] = dto.ShuttleAllResponse{
+			ShuttleUUID:    shuttle.ShuttleUUID,
 			StudentUUID:     shuttle.StudentUUID,
 			Status:          shuttle.Status,
 			StudentFirstName: shuttle.StudentFirstName,
@@ -95,6 +98,7 @@ func (s *ShuttleService) GetAllShuttleByDriver(driverUUID uuid.UUID) ([]dto.Shut
 	responses := make([]dto.ShuttleAllResponse, len(shuttles))
 	for i, shuttle := range shuttles {
 		responses[i] = dto.ShuttleAllResponse{
+			ShuttleUUID:    shuttle.ShuttleUUID,
 			StudentUUID:     shuttle.StudentUUID,
 			Status:          shuttle.Status,
 			StudentFirstName: shuttle.StudentFirstName,

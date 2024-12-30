@@ -463,6 +463,7 @@ func (service *UserService) GetSpecDriverForPermittedSchool(driverUUID string, s
 		log.Println("Error fetching driver data:", err)
 		return dto.UserResponseDTO{}, err
 	}
+	log.Println("Fetched user, school, and vehicle data successfully.")
 
 	log.Println("User data fetched:")
 	log.Printf("User UUID: %s, Username: %s, Email: %s", user.UUID, user.Username, user.Email)
@@ -479,13 +480,13 @@ func (service *UserService) GetSpecDriverForPermittedSchool(driverUUID string, s
 		UpdatedBy:  safeStringFormat(user.UpdatedBy),
 	}
 
-	log.Println("Driver details fetched:")
+	log.Println("Driver details fetching...")
 	driverDetails, err := service.userRepository.FetchDriverDetails(user.UUID)
 	if err != nil {
 		log.Println("Error fetching driver details:", err)
 		return dto.UserResponseDTO{}, err
 	}
-	log.Printf("First Name: %s, Last Name: %s, Phone: %s", driverDetails.FirstName, driverDetails.LastName, driverDetails.Phone)
+	log.Printf("Fetched driver details: First Name: %s, Last Name: %s, Phone: %s", driverDetails.FirstName, driverDetails.LastName, driverDetails.Phone)
 
 	var vehicleDetails, vehicleUUID string
 	if vehicle.VehicleNumber == "N/A" || vehicle.UUID == uuid.Nil {
@@ -493,14 +494,17 @@ func (service *UserService) GetSpecDriverForPermittedSchool(driverUUID string, s
 	} else {
 		vehicleDetails = fmt.Sprintf("%s (%s)", vehicle.VehicleNumber, vehicle.VehicleName)
 	}
+	log.Printf("Vehicle details: %s", vehicleDetails)
 
 	if vehicle.UUID == uuid.Nil {
 		vehicleUUID = "N/A"
 	} else {
 		vehicleUUID = vehicle.UUID.String()
 	}
+	log.Printf("Vehicle UUID: %s", vehicleUUID)
 
 	// Marshal details into JSON
+	log.Println("Marshaling driver details into JSON...")
 	driverDetailsJSON, err := json.Marshal(dto.DriverDetailsResponseDTO{
 		SchoolUUID:    schoolUUID,
 		SchoolName:    school.Name,
@@ -520,6 +524,7 @@ func (service *UserService) GetSpecDriverForPermittedSchool(driverUUID string, s
 	}
 
 	// Log the JSON in readable format
+	log.Println("Pretty-printing driver details JSON...")
 	prettyJSON, err := json.MarshalIndent(driverDetailsJSON, "", "  ")
 	if err != nil {
 		log.Println("Error pretty-printing driver details JSON:", err)
@@ -528,9 +533,10 @@ func (service *UserService) GetSpecDriverForPermittedSchool(driverUUID string, s
 	log.Printf("Driver Details JSON: %s", string(prettyJSON))
 
 	userDTO.Details = driverDetailsJSON
+	log.Println("Driver details added to user DTO.")
 
 	// Log the final DTO
-	log.Printf("Final User DTO: %+v", userDTO)
+	log.Printf("User details: %+v", userDTO)
 
 	return userDTO, nil
 }

@@ -75,6 +75,54 @@ func (service *VehicleService) GetAllVehicles(page, limit int, sortField, sortDi
 	return vehiclesDTO, total, nil
 }
 
+func (service *VehicleService) GetAllVehiclesForSchool(page, limit int, sortField, sortDirection, schoolUUID string) ([]dto.VehicleResponseDTO, int, error) {
+    offset := (page - 1) * limit
+
+    // Modifikasi query untuk memasukkan schoolUUID
+    vehicles, school, driver, err := service.vehicleRepository.FetchAllVehiclesForSchool(offset, limit, sortField, sortDirection, schoolUUID)
+    if err != nil {
+        return nil, 0, err
+    }
+
+	total, err := service.vehicleRepository.CountVehiclesForSchool(schoolUUID)
+    if err != nil {
+        return nil, 0, err
+    }
+
+    var vehiclesDTO []dto.VehicleResponseDTO
+    for _, vehicle := range vehicles {
+
+        var schoolName string
+        if vehicle.SchoolUUID == nil || school[vehicle.SchoolUUID.String()].UUID == uuid.Nil {
+            schoolName = "N/A"
+        } else {
+            schoolName = school[vehicle.SchoolUUID.String()].Name
+        }
+
+        var driverName string
+        if vehicle.DriverUUID == nil || driver[vehicle.DriverUUID.String()].UserUUID == uuid.Nil {
+            driverName = "N/A"
+        } else {
+            driverName = driver[vehicle.DriverUUID.String()].FirstName + " " + driver[vehicle.DriverUUID.String()].LastName
+        }
+
+        vehiclesDTO = append(vehiclesDTO, dto.VehicleResponseDTO{
+            UUID:       vehicle.UUID.String(),
+            SchoolName: schoolName,
+            DriverName: driverName,
+            Name:       vehicle.VehicleName,
+            Number:     vehicle.VehicleNumber,
+            Type:       vehicle.VehicleType,
+            Color:      vehicle.VehicleColor,
+            Seats:      vehicle.VehicleSeats,
+            Status:     vehicle.VehicleStatus,
+            CreatedAt:  safeTimeFormat(vehicle.CreatedAt),
+        })
+    }
+
+    return vehiclesDTO, total, nil
+}
+
 func (service *VehicleService) GetSpecVehicle(id string) (dto.VehicleResponseDTO, error) {
 	vehicle, school, driver, err := service.vehicleRepository.FetchSpecVehicle(id)
 	if err != nil {

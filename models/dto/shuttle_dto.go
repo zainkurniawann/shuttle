@@ -21,6 +21,7 @@ type ShuttleResponse struct {
 }
 
 type ShuttleAllResponse struct {
+	ShuttleUUID     string `db:"shuttle_uuid" json:"shuttle_uuid"`
 	StudentUUID      string         `db:"student_uuid" json:"student_uuid"`
 	Status           string         `db:"status" json:"status"`
 	StudentFirstName string         `db:"student_first_name" json:"student_first_name"`

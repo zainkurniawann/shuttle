@@ -12,7 +12,7 @@ import "database/sql"
 type RouteRequestDTO struct {
 	DriverUUID		 string			`json:"driver_uuid" validate:"required"`
 	StudentUUID		 string			`json:"student_uuid" validate:"required"`
-	SchoolUUID		 string			`json:"school_uuid" validate:"required"`
+	SchoolUUID		 string			`json:"school_uuid"`
 	RouteName        string         `json:"route_name" validate:"required"`
 	RouteDescription string         `json:"route_description" validate:"required"`
 }

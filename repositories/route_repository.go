@@ -22,6 +22,7 @@ type RouteRepositoryInterface interface {
 	FetchSpecRoute(routeUUID string) (entity.Route, error)
 	FetchAllRoutesByDriver(driverUUID string) ([]dto.RouteResponseByDriverDTO, error)
 	FetchSpecRouteByDriver(driverUUID, studentUUID string) (*dto.RouteResponseByDriverDTO, error)
+	GetRouteByStudentAndSchool(studentUUID, schoolUUID string) (*entity.Route, error)
 	AddRoute(route entity.Route) error
 	UpdateRoute(routeUUID string, route entity.Route) error
 	DeleteRoute(routeUUID string, username string) error
@@ -193,6 +194,31 @@ func (repo *routeRepository) FetchSpecRouteByDriver(driverUUID, studentUUID stri
 	}
 	return &route, nil
 }
+
+func (r *routeRepository) GetRouteByStudentAndSchool(studentUUID, schoolUUID string) (*entity.Route, error) {
+	query := `
+		SELECT route_id, route_uuid, driver_uuid, student_uuid, school_uuid, route_name, route_description, created_at, created_by
+		FROM route_jawa
+		WHERE student_uuid = $1 AND school_uuid = $2
+		LIMIT 1
+	`
+
+	var route entity.Route
+	err := r.DB.QueryRow(query, studentUUID, schoolUUID).Scan(
+		&route.RouteID, &route.RouteUUID, &route.DriverUUID, &route.StudentUUID, &route.SchoolUUID,
+		&route.RouteName, &route.RouteDescription, &route.CreatedAt, &route.CreatedBy,
+	)
+
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return nil, nil // Tidak ditemukan, berarti route tidak ada
+		}
+		return nil, fmt.Errorf("failed to query database: %w", err)
+	}
+
+	return &route, nil
+}
+
 
 func (r *routeRepository) AddRoute(route entity.Route) error {
 	query := `
