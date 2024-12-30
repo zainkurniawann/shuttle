@@ -1,7 +1,9 @@
 package repositories
 
 import (
+	"database/sql"
 	"fmt"
+	"log"
 	"shuttle/models/entity"
 
 	"github.com/google/uuid"
@@ -17,7 +19,8 @@ type VehicleRepositoryInterface interface {
 	FetchSpecVehicle(uuid string) (entity.Vehicle, entity.School, entity.DriverDetails, error)
 	FetchAllVehiclesForSchool(offset, limit int, sortField, sortDirection, schoolUUID string) ([]entity.Vehicle, map[string]entity.School, map[string]entity.DriverDetails, error)
 
-	SaveVehicle(vehicle entity.Vehicle) error
+	SaveVehicle(vehicle entity.Vehicle) error 
+	GetSchoolUUIDByUserID(userID string) (string, error)
 	UpdateVehicle(vehicle entity.Vehicle) error
 	DeleteVehicle(vehicle entity.Vehicle) error
 }
@@ -316,19 +319,46 @@ func (repository *VehicleRepository) FetchSpecVehicle(uuid string) (entity.Vehic
 	return vehicle, school, driver, nil
 }
 
-func (repository *VehicleRepository) SaveVehicle(vehicle entity.Vehicle) error {
+func (repository *VehicleRepository) GetSchoolUUIDByUserID(userID string) (string, error) {
+	log.Println("Fetching school_uuid for user_id:", userID)
 	query := `
-		INSERT INTO vehicles (vehicle_id, vehicle_uuid, school_uuid, vehicle_name, vehicle_number, vehicle_type, vehicle_color, vehicle_seats, vehicle_status, created_by)
-		VALUES (:vehicle_id, :vehicle_uuid, :school_uuid, :vehicle_name, :vehicle_number, :vehicle_type, :vehicle_color, :vehicle_seats, :vehicle_status, :created_by)
+		SELECT school_uuid 
+		FROM users 
+		WHERE user_id = $1 AND deleted_at IS NULL
 	`
-
-	_, err := repository.db.NamedExec(query, vehicle)
+	var schoolUUID string
+	err := repository.db.Get(&schoolUUID, query, userID)
 	if err != nil {
-		return err
+		if err == sql.ErrNoRows {
+			log.Println("No school_uuid found for user_id:", userID)
+			return "", nil // Tidak ditemukan, bisa dikembalikan string kosong
+		}
+		log.Println("Error fetching school_uuid:", err)
+		return "", err
 	}
-
-	return nil
+	log.Println("School UUID fetched successfully:", schoolUUID)
+	return schoolUUID, nil
 }
+
+
+func (repository *VehicleRepository) SaveVehicle(vehicle entity.Vehicle) error {
+    log.Println("Inserting vehicle into database:", vehicle)
+
+    query := `
+        INSERT INTO vehicles (vehicle_id, vehicle_uuid, school_uuid, vehicle_name, vehicle_number, vehicle_type, vehicle_color, vehicle_seats, vehicle_status, created_by)
+        VALUES (:vehicle_id, :vehicle_uuid, :school_uuid, :vehicle_name, :vehicle_number, :vehicle_type, :vehicle_color, :vehicle_seats, :vehicle_status, :created_by)
+    `
+    log.Printf("SQL query to insert vehicle: %s\n", query)
+
+    _, err := repository.db.NamedExec(query, vehicle)
+    if err != nil {
+        log.Println("Error inserting vehicle:", err)
+        return err
+    }
+    log.Println("Vehicle inserted successfully into the database")
+    return nil
+}
+
 
 func (repository *VehicleRepository) UpdateVehicle(vehicle entity.Vehicle) error {
 	query := `

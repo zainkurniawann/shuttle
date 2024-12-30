@@ -2,6 +2,7 @@ package handler
 
 import (
 	"fmt"
+	"log"
 	"net/http"
 	"shuttle/errors"
 	"shuttle/logger"
@@ -134,23 +135,60 @@ func (handler *vehicleHandler) GetSpecVehicle(c *fiber.Ctx) error {
 }
 
 func (handler *vehicleHandler) AddVehicle(c *fiber.Ctx) error {
-	vehicle := new(dto.VehicleRequestDTO)
-	if err := c.BodyParser(vehicle); err != nil {
-		return utils.BadRequestResponse(c, "Invalid request data", nil)
-	}
+    log.Println("Start processing AddVehicle request")
 
-	if err := utils.ValidateStruct(c, vehicle); err != nil {
-		return utils.BadRequestResponse(c, strings.ToUpper(err.Error()[0:1])+err.Error()[1:], nil)
-	}
+    // Parsing body request ke DTO
+    vehicle := new(dto.VehicleRequestDTO)
+    if err := c.BodyParser(vehicle); err != nil {
+        log.Println("Error parsing request body:", err)
+        return utils.BadRequestResponse(c, "Invalid request data", nil)
+    }
+    log.Println("Request body parsed successfully:", vehicle)
 
-	if err := handler.vehicleService.AddVehicle(*vehicle); err != nil {
-		if customErr, ok := err.(*errors.CustomError); ok {
-			return utils.ErrorResponse(c, customErr.StatusCode, strings.ToUpper(string(customErr.Message[0]))+customErr.Message[1:], nil)
-		}
-		return utils.ErrorResponse(c, http.StatusInternalServerError, "Something went wrong, please try again later", nil)
-	}
+    // Validasi request
+    if err := utils.ValidateStruct(c, vehicle); err != nil {
+        log.Println("Validation error:", err)
+        return utils.BadRequestResponse(c, strings.ToUpper(err.Error()[0:1])+err.Error()[1:], nil)
+    }
+    log.Println("Request body validation passed")
 
-	return utils.SuccessResponse(c, "Vehicle created successfully", nil)
+    // Ambil role dan user_id dari token
+    role, ok := c.Locals("role_code").(string)
+    if !ok || role == "" {
+        log.Println("User role missing or invalid")
+        return utils.UnauthorizedResponse(c, "Invalid user role", nil)
+    }
+    log.Println("User role retrieved from token:", role)
+
+    userID, ok := c.Locals("userUUID").(string)
+    if !ok || userID == "" {
+        log.Println("User ID missing in token")
+        return utils.UnauthorizedResponse(c, "Invalid user ID", nil)
+    }
+    log.Println("User ID retrieved from token:", userID)
+
+    // Ambil schoolUUID dari context
+    schoolUUID, ok := c.Locals("schoolUUID").(string)
+    if !ok || schoolUUID == "" {
+        log.Println("School UUID missing or invalid in context")
+        return utils.UnauthorizedResponse(c, "School UUID is missing or invalid", nil)
+    }
+    log.Println("School UUID retrieved from context:", schoolUUID)
+
+    // Panggil service untuk menambahkan vehicle
+    log.Println("Calling AddVehicle service")
+    if err := handler.vehicleService.AddVehicle(*vehicle, role, schoolUUID); err != nil {
+        if customErr, ok := err.(*errors.CustomError); ok {
+            log.Println("Error from AddVehicle service:", customErr.Message)
+            return utils.ErrorResponse(c, customErr.StatusCode, customErr.Message, nil)
+        }
+        log.Println("Unexpected error from AddVehicle service:", err)
+        return utils.ErrorResponse(c, http.StatusInternalServerError, "Something went wrong, please try again later", nil)
+    }
+    log.Println("Vehicle successfully added")
+
+    // Berhasil
+    return utils.SuccessResponse(c, "Vehicle created successfully", nil)
 }
 
 func (handler *vehicleHandler) UpdateVehicle(c *fiber.Ctx) error {
