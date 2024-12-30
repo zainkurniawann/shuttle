@@ -1,7 +1,6 @@
 package repositories
 
 import (
-	"database/sql"
 	"fmt"
 	"log"
 	"shuttle/models/entity"
@@ -12,15 +11,16 @@ import (
 
 type VehicleRepositoryInterface interface {
 	CountVehicles() (int, error)
-	CountVehiclesForSchool(schoolUUID string) (int, error)
 	CheckVehicleNumberExists(uuid ,vehicleNumber string) (bool, error)
 
 	FetchAllVehicles(offset, limit int, sortField, sortDirection string) ([]entity.Vehicle, map[string]entity.School, map[string]entity.DriverDetails, error)
+	FetchAllVehiclesForPermittedSchool(offset, limit int, sortField, sortDirection, schoolUUID string) ([]entity.Vehicle, map[string]entity.School, map[string]entity.DriverDetails, error)
+	CountVehiclesForPermittedSchool(schoolUUID string) (int, error)
 	FetchSpecVehicle(uuid string) (entity.Vehicle, entity.School, entity.DriverDetails, error)
-	FetchAllVehiclesForSchool(offset, limit int, sortField, sortDirection, schoolUUID string) ([]entity.Vehicle, map[string]entity.School, map[string]entity.DriverDetails, error)
+	FetchSpecVehicleForPermittedSchool(uuid string) (entity.Vehicle, entity.School, entity.DriverDetails, error)
 
-	SaveVehicle(vehicle entity.Vehicle) error 
-	GetSchoolUUIDByUserID(userID string) (string, error)
+	SaveVehicle(vehicle entity.Vehicle) error
+	SaveVehicleForPermittedSchool(vehicle entity.Vehicle) error
 	UpdateVehicle(vehicle entity.Vehicle) error
 	DeleteVehicle(vehicle entity.Vehicle) error
 }
@@ -45,24 +45,6 @@ func (repository *VehicleRepository) CountVehicles() (int, error) {
 	`
 
 	if err := repository.db.Get(&count, query); err != nil {
-		return 0, err
-	}
-
-	return count, nil
-}
-
-func (repository *VehicleRepository) CountVehiclesForSchool(schoolUUID string) (int, error) {
-	var count int
-
-	// Menggunakan schoolUUID sebagai parameter untuk menghitung kendaraan berdasarkan sekolah tertentu
-	query := `
-		SELECT COUNT(vehicle_id)
-		FROM vehicles
-		WHERE school_uuid = $1 AND deleted_at IS NULL
-	`
-
-	// Mengambil data count berdasarkan query
-	if err := repository.db.Get(&count, query, schoolUUID); err != nil {
 		return 0, err
 	}
 
@@ -174,7 +156,7 @@ func (repository *VehicleRepository) FetchAllVehicles(offset, limit int, sortFie
     return vehicles, schoolsMap, driversMap, nil
 }
 
-func (repository *VehicleRepository) FetchAllVehiclesForSchool(offset, limit int, sortField, sortDirection, schoolUUID string) ([]entity.Vehicle, map[string]entity.School, map[string]entity.DriverDetails, error) {
+func (repository *VehicleRepository) FetchAllVehiclesForPermittedSchool(offset, limit int, sortField, sortDirection, schoolUUID string) ([]entity.Vehicle, map[string]entity.School, map[string]entity.DriverDetails, error) {
     var vehicles []entity.Vehicle
     var schoolsMap = make(map[string]entity.School)
 	var driversMap = make(map[string]entity.DriverDetails)
@@ -259,6 +241,24 @@ func (repository *VehicleRepository) FetchAllVehiclesForSchool(offset, limit int
     return vehicles, schoolsMap, driversMap, nil
 }
 
+func (repository *VehicleRepository) CountVehiclesForPermittedSchool(schoolUUID string) (int, error) {
+	var count int
+
+	// Menggunakan schoolUUID sebagai parameter untuk menghitung kendaraan berdasarkan sekolah tertentu
+	query := `
+		SELECT COUNT(vehicle_id)
+		FROM vehicles
+		WHERE school_uuid = $1 AND deleted_at IS NULL
+	`
+
+	// Mengambil data count berdasarkan query
+	if err := repository.db.Get(&count, query, schoolUUID); err != nil {
+		return 0, err
+	}
+
+	return count, nil
+}
+
 func (repository *VehicleRepository) FetchSpecVehicle(uuid string) (entity.Vehicle, entity.School, entity.DriverDetails, error) {
 	var vehicle entity.Vehicle
 	var school entity.School
@@ -319,29 +319,81 @@ func (repository *VehicleRepository) FetchSpecVehicle(uuid string) (entity.Vehic
 	return vehicle, school, driver, nil
 }
 
-func (repository *VehicleRepository) GetSchoolUUIDByUserID(userID string) (string, error) {
-	log.Println("Fetching school_uuid for user_id:", userID)
+func (repository *VehicleRepository) FetchSpecVehicleForPermittedSchool(uuid string) (entity.Vehicle, entity.School, entity.DriverDetails, error) {
+	var vehicle entity.Vehicle
+	var school entity.School
+	var driver entity.DriverDetails
+
 	query := `
-		SELECT school_uuid 
-		FROM users 
-		WHERE user_id = $1 AND deleted_at IS NULL
+		SELECT
+			v.vehicle_uuid, v.school_uuid, v.driver_uuid, v.vehicle_name, v.vehicle_number,
+			v.vehicle_type, v.vehicle_color, v.vehicle_seats, v.vehicle_status,
+			v.created_at, v.created_by, v.updated_at, v.updated_by,
+			COALESCE(
+				CASE
+					WHEN s.deleted_at IS NULL THEN s.school_uuid
+				END, 
+				NULL
+			) AS school_uuid,
+			COALESCE(
+				CASE
+					WHEN s.deleted_at IS NULL THEN s.school_name
+				END,
+				'N/A'
+			) AS school_name,
+			COALESCE(
+				CASE
+					WHEN u.deleted_at IS NULL THEN d.user_uuid
+				END,
+				NULL
+			) AS driver_uuid,
+			COALESCE(
+				CASE
+					WHEN u.deleted_at IS NULL THEN d.user_first_name
+				END,
+				'N/A'
+			) AS driver_first_name,
+			COALESCE(
+				CASE
+					WHEN u.deleted_at IS NULL THEN d.user_last_name
+				END,
+				'N/A'
+			) AS driver_last_name
+		FROM vehicles v
+		LEFT JOIN schools s ON v.school_uuid = s.school_uuid
+		LEFT JOIN driver_details d ON v.driver_uuid = d.user_uuid
+		LEFT JOIN users u ON d.user_uuid = u.user_uuid
+		WHERE v.deleted_at IS NULL AND v.vehicle_uuid = $1
 	`
-	var schoolUUID string
-	err := repository.db.Get(&schoolUUID, query, userID)
+
+	err := repository.db.QueryRowx(query, uuid).Scan(
+		&vehicle.UUID, &vehicle.SchoolUUID, &vehicle.DriverUUID, &vehicle.VehicleName, &vehicle.VehicleNumber,
+		&vehicle.VehicleType, &vehicle.VehicleColor, &vehicle.VehicleSeats, &vehicle.VehicleStatus,
+		&vehicle.CreatedAt, &vehicle.CreatedBy, &vehicle.UpdatedAt, &vehicle.UpdatedBy,
+		&school.UUID, &school.Name, &driver.UserUUID, &driver.FirstName, &driver.LastName,
+	)
 	if err != nil {
-		if err == sql.ErrNoRows {
-			log.Println("No school_uuid found for user_id:", userID)
-			return "", nil // Tidak ditemukan, bisa dikembalikan string kosong
-		}
-		log.Println("Error fetching school_uuid:", err)
-		return "", err
+		return entity.Vehicle{}, entity.School{}, entity.DriverDetails{}, err
 	}
-	log.Println("School UUID fetched successfully:", schoolUUID)
-	return schoolUUID, nil
+
+	return vehicle, school, driver, nil
 }
 
-
 func (repository *VehicleRepository) SaveVehicle(vehicle entity.Vehicle) error {
+	query := `
+		INSERT INTO vehicles (vehicle_id, vehicle_uuid, school_uuid, vehicle_name, vehicle_number, vehicle_type, vehicle_color, vehicle_seats, vehicle_status, created_by)
+		VALUES (:vehicle_id, :vehicle_uuid, :school_uuid, :vehicle_name, :vehicle_number, :vehicle_type, :vehicle_color, :vehicle_seats, :vehicle_status, :created_by)
+	`
+
+	_, err := repository.db.NamedExec(query, vehicle)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (repository *VehicleRepository) SaveVehicleForPermittedSchool(vehicle entity.Vehicle) error {
     log.Println("Inserting vehicle into database:", vehicle)
 
     query := `
@@ -358,7 +410,6 @@ func (repository *VehicleRepository) SaveVehicle(vehicle entity.Vehicle) error {
     log.Println("Vehicle inserted successfully into the database")
     return nil
 }
-
 
 func (repository *VehicleRepository) UpdateVehicle(vehicle entity.Vehicle) error {
 	query := `

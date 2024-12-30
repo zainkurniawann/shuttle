@@ -46,15 +46,15 @@ func (repo *StudentRepository) FetchAllStudentsWithParents(offset int, limit int
 	var parentDetails entity.ParentDetails
 
 	query := fmt.Sprintf(`
-		SELECT s.student_uuid, s.parent_uuid, s.school_uuid, s.student_first_name, s.student_last_name, s.student_gender,
-			s.student_grade, s.student_address, s.student_pickup_point, s.created_at, u.user_uuid, pd.user_first_name, 
-			pd.user_last_name, pd.user_phone, pd.user_address
-		FROM students s
-		INNER JOIN users u ON s.parent_uuid = u.user_uuid
-		INNER JOIN parent_details pd ON s.parent_uuid = pd.user_uuid
-		WHERE s.school_uuid = $1 AND u.deleted_at IS NULL AND s.deleted_at IS NULL
-		ORDER BY %s %s
-		LIMIT $2 OFFSET $3`, sortField, sortDirection)
+	SELECT s.student_uuid, s.parent_uuid, s.school_uuid, s.student_first_name, s.student_last_name, 
+		s.student_gender, s.student_grade, s.student_address, s.student_pickup_point, s.created_at, 
+		u.user_uuid, u.user_username, pd.user_first_name, pd.user_last_name, pd.user_phone, pd.user_address
+	FROM students s
+	INNER JOIN users u ON s.parent_uuid = u.user_uuid
+	INNER JOIN parent_details pd ON s.parent_uuid = pd.user_uuid
+	WHERE s.school_uuid = $1 AND u.deleted_at IS NULL AND s.deleted_at IS NULL
+	ORDER BY %s %s
+	LIMIT $2 OFFSET $3`, sortField, sortDirection)
 
 	rows, err := repo.db.Query(query, schoolUUID, limit, offset)
 	if err != nil {
@@ -65,7 +65,7 @@ func (repo *StudentRepository) FetchAllStudentsWithParents(offset int, limit int
 	for rows.Next() {
 		err := rows.Scan(&student.UUID, &student.ParentUUID, &student.SchoolUUID, &student.FirstName,
 			&student.LastName, &student.Gender, &student.Grade, &student.StudentAddress, 
-			&student.StudentPickupPoint, &student.CreatedAt, &parentDetails.UserUUID, &parentDetails.FirstName,
+			&student.StudentPickupPoint, &student.CreatedAt, &parentDetails.UserUUID, &student.UserUsername, &parentDetails.FirstName,
 			&parentDetails.LastName, &parentDetails.Phone, &parentDetails.Address)
 		if err != nil {
 			return nil, entity.ParentDetails{}, err
@@ -85,34 +85,35 @@ func (repo *StudentRepository) FetchAllStudentsWithParents(offset int, limit int
 	return students, parentDetails, nil
 }
 
-
 func (repo *StudentRepository) FetchSpecStudentWithParents(studentUUID uuid.UUID, schoolUUID string) (entity.Student, entity.ParentDetails, error) {
-	var student entity.Student
-	var parentDetails entity.ParentDetails
+    var student entity.Student
+    var parentDetails entity.ParentDetails
 
-	query := `
-		SELECT s.student_uuid, s.parent_uuid, s.school_uuid, s.student_first_name, s.student_last_name, s.student_gender,
-			s.student_grade, s.student_address, s.student_pickup_point, s.created_at, u.user_uuid, pd.user_first_name, pd.user_last_name, pd.user_phone, pd.user_address
-		FROM students s
-		INNER JOIN users u ON s.parent_uuid = u.user_uuid
-		INNER JOIN parent_details pd ON s.parent_uuid = pd.user_uuid
-		WHERE s.student_uuid = $1 AND s.school_uuid = $2 AND u.deleted_at IS NULL AND s.deleted_at IS NULL`
-	err := repo.db.QueryRowx(query, studentUUID, schoolUUID).Scan(&student.UUID, &student.ParentUUID, &student.SchoolUUID, &student.FirstName,
-		&student.LastName, &student.Gender, &student.Grade, &student.StudentAddress, &student.StudentPickupPoint, &student.CreatedAt,
-		&parentDetails.UserUUID, &parentDetails.FirstName, &parentDetails.LastName, &parentDetails.Phone, &parentDetails.Address)
-	if err != nil {
-		return entity.Student{}, entity.ParentDetails{}, err
-	}
+    query := `
+    SELECT s.student_uuid, s.parent_uuid, s.school_uuid, s.student_first_name, s.student_last_name, s.student_gender,
+           s.student_grade, s.student_address, s.student_pickup_point, s.created_at, 
+           u.user_uuid, u.user_username, u.user_email, pd.user_first_name, pd.user_last_name, pd.user_phone, pd.user_address
+    FROM students s
+    INNER JOIN users u ON s.parent_uuid = u.user_uuid
+    INNER JOIN parent_details pd ON s.parent_uuid = pd.user_uuid
+    WHERE s.student_uuid = $1 AND s.school_uuid = $2 AND u.deleted_at IS NULL AND s.deleted_at IS NULL`
+    
+    err := repo.db.QueryRowx(query, studentUUID, schoolUUID).Scan(&student.UUID, &student.ParentUUID, &student.SchoolUUID, &student.FirstName,
+        &student.LastName, &student.Gender, &student.Grade, &student.StudentAddress, &student.StudentPickupPoint, &student.CreatedAt,
+        &parentDetails.UserUUID, &student.UserEmail, &student.UserUsername, &parentDetails.FirstName, &parentDetails.LastName, &parentDetails.Phone, &parentDetails.Address)
+    if err != nil {
+        return entity.Student{}, entity.ParentDetails{}, err
+    }
 
-	parentDetails = entity.ParentDetails{
-		UserUUID:  parentDetails.UserUUID,
-		FirstName: parentDetails.FirstName,
-		LastName:  parentDetails.LastName,
-		Phone:     parentDetails.Phone,
-		Address:   parentDetails.Address,
-	}
+    parentDetails = entity.ParentDetails{
+        UserUUID:  parentDetails.UserUUID,
+        FirstName: parentDetails.FirstName,
+        LastName:  parentDetails.LastName,
+        Phone:     parentDetails.Phone,
+        Address:   parentDetails.Address,
+    }
 
-	return student, parentDetails, nil
+    return student, parentDetails, nil
 }
 
 func (repo *StudentRepository) SaveStudent(student entity.Student) error {

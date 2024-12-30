@@ -39,6 +39,8 @@ type Student struct {
 	ParentUUID sql.NullString `db:"parent_uuid"`
 	SchoolID  int64          `db:"school_id"`
 	SchoolUUID uuid.UUID     `db:"school_uuid"`
+	UserUsername	string
+	UserEmail	string
     SchoolName string   
 	ShuttleStatus sql.NullString  
 	CreatedAt sql.NullTime   `db:"created_at"`

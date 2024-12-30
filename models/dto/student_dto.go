@@ -46,7 +46,11 @@ type SchoolStudentParentRequestDTO struct {
 type SchoolStudentParentResponseDTO struct {
 	StudentUUID      string `json:"student_uuid"`
 	ParentUUID       string `json:"parent_uuid,omitempty"`
-	ParentName       string `json:"parent_name"`
+	ParentName		string `json:"parent_name"`
+	ParentFirstName       string `json:"parent_first_name"`
+	ParentlastName       string `json:"parent_last_name"`
+	ParentUsername     string    `json:"parent_username"`
+	ParentEmail		string 	`json:"parent_email"`
 	ParentPhone      string `json:"parent_phone"`
 	StudentFirstName string `json:"student_first_name"`
 	StudentLastName  string `json:"student_last_name"`
