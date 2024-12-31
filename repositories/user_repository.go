@@ -142,6 +142,9 @@ func (r *userRepository) FetchAllDriversForPermittedSchool(offset, limit int, so
 }
 
 func (r *userRepository) FetchSpecDriverForPermittedSchool(userUUID, schoolUUID string) (entity.User, entity.School, entity.Vehicle, error) {
+	log.Println("Fetching specific driver for permitted school...")
+	log.Printf("Input Parameters - User UUID: %s, School UUID: %s", userUUID, schoolUUID)
+
 	var user entity.User
 	var details entity.DriverDetails
 	var school entity.School
@@ -169,6 +172,12 @@ func (r *userRepository) FetchSpecDriverForPermittedSchool(userUUID, schoolUUID 
 				END,
 				'N/A'
 			) AS school_name,
+			 COALESCE(
+				CASE
+					WHEN v.deleted_at IS NULL THEN v.vehicle_name
+				END,
+				'N/A'
+			) AS vehicle_name,
 			COALESCE(
 				CASE
 					WHEN v.deleted_at IS NULL THEN v.vehicle_number
@@ -181,25 +190,30 @@ func (r *userRepository) FetchSpecDriverForPermittedSchool(userUUID, schoolUUID 
 		LEFT JOIN vehicles v ON d.vehicle_uuid = v.vehicle_uuid
 		WHERE u.user_role = 'driver' AND u.deleted_at IS NULL AND u.user_uuid = $1 AND d.school_uuid = $2
 	`
-	log.Printf("Vehicle UUID: %s", vehicle.UUID)
-
+	log.Println("Executing query to fetch data...")
 	err := r.DB.QueryRowx(query, userUUID, schoolUUID).Scan(
 		&user.UUID, &user.Username, &user.Email, &user.Status, &user.LastActive, &user.CreatedAt, &user.CreatedBy, &user.UpdatedAt, &user.UpdatedBy,
-		&details.SchoolUUID, &details.VehicleUUID, &details.Picture, &details.FirstName, &details.LastName,
+		&details.SchoolUUID, &vehicle.UUID, &details.Picture, &details.FirstName, &details.LastName,
 		&details.Gender, &details.Phone, &details.Address, &details.LicenseNumber,
-		&school.Name, &vehicle.VehicleNumber,
-	)
+		&school.Name, &vehicle.VehicleNumber, &vehicle.VehicleName, // <-- Tambahkan di sini
+	)	
 	if err != nil {
+		log.Println("Error executing query:", err)
 		return user, school, vehicle, err
 	}
-	log.Printf("Fetched data: SchoolUUID: %s, VehicleUUID: %s, VehicleNumber: %s", details.SchoolUUID, details.VehicleUUID, vehicle.VehicleNumber)
-
+	log.Println("Query executed successfully. Data fetched.")
+	log.Printf("Received vehicle data - UUID: %s, Number: %s", vehicle.UUID, vehicle.VehicleNumber)
+	log.Println("Marshaling driver details into JSON...")
 	detailsJSON, err := json.Marshal(details)
 	if err != nil {
+		log.Println("Error marshaling driver details:", err)
 		return user, school, vehicle, fmt.Errorf("error marshaling driver details: %w", err)
 	}
+	log.Println("Driver details marshaled successfully.")
 
 	user.DetailsJSON = detailsJSON
+
+	log.Println("Returning fetched data.")
 	return user, school, vehicle, nil
 }
 

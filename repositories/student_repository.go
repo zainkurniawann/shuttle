@@ -11,7 +11,7 @@ import (
 type StudentRepositoryInterface interface {
 	CountAllStudentsWithParents(schoolUUID string) (int, error)
 
-	FetchAllStudentsWithParents(offset int, limit int, sortField string, sortDirection string, schoolUUID string) ([]entity.Student, entity.ParentDetails, error)
+	FetchAllStudentsWithParents(offset int, limit int, sortField string, sortDirection string, schoolUUID string) ([]entity.Student, []entity.ParentDetails, error)
 	FetchSpecStudentWithParents(studentUUID uuid.UUID, schoolUUID string) (entity.Student, entity.ParentDetails, error)
 	SaveStudent(student entity.Student) error
 	UpdateStudent(student entity.Student) error
@@ -40,49 +40,43 @@ func (repo *StudentRepository) CountAllStudentsWithParents(schoolUUID string) (i
 	return count, nil
 }
 
-func (repo *StudentRepository) FetchAllStudentsWithParents(offset int, limit int, sortField string, sortDirection string, schoolUUID string) ([]entity.Student, entity.ParentDetails, error) {
+func (repo *StudentRepository) FetchAllStudentsWithParents(offset int, limit int, sortField string, sortDirection string, schoolUUID string) ([]entity.Student, []entity.ParentDetails, error) {
 	var students []entity.Student
-	var student entity.Student
-	var parentDetails entity.ParentDetails
+	var parents []entity.ParentDetails
 
 	query := fmt.Sprintf(`
-	SELECT s.student_uuid, s.parent_uuid, s.school_uuid, s.student_first_name, s.student_last_name, 
-		s.student_gender, s.student_grade, s.student_address, s.student_pickup_point, s.created_at, 
-		u.user_uuid, u.user_username, pd.user_first_name, pd.user_last_name, pd.user_phone, pd.user_address
-	FROM students s
-	INNER JOIN users u ON s.parent_uuid = u.user_uuid
-	INNER JOIN parent_details pd ON s.parent_uuid = pd.user_uuid
-	WHERE s.school_uuid = $1 AND u.deleted_at IS NULL AND s.deleted_at IS NULL
-	ORDER BY %s %s
-	LIMIT $2 OFFSET $3`, sortField, sortDirection)
+		SELECT s.student_uuid, s.parent_uuid, s.school_uuid, s.student_first_name, s.student_last_name, s.student_gender,
+			s.student_grade, s.created_at, u.user_uuid, pd.user_first_name, pd.user_last_name, pd.user_phone, pd.user_address
+		FROM students s
+		INNER JOIN users u ON s.parent_uuid = u.user_uuid
+		INNER JOIN parent_details pd ON s.parent_uuid = pd.user_uuid
+		WHERE s.school_uuid = $1 AND u.deleted_at IS NULL AND s.deleted_at IS NULL
+		ORDER BY %s %s
+		LIMIT $2 OFFSET $3`,
+		sortField, sortDirection)
 
 	rows, err := repo.db.Query(query, schoolUUID, limit, offset)
 	if err != nil {
-		return nil, entity.ParentDetails{}, err
+		return nil, nil, err
 	}
 	defer rows.Close()
 
 	for rows.Next() {
-		err := rows.Scan(&student.UUID, &student.ParentUUID, &student.SchoolUUID, &student.FirstName,
-			&student.LastName, &student.Gender, &student.Grade, &student.StudentAddress, 
-			&student.StudentPickupPoint, &student.CreatedAt, &parentDetails.UserUUID, &student.UserUsername, &parentDetails.FirstName,
-			&parentDetails.LastName, &parentDetails.Phone, &parentDetails.Address)
+		var student entity.Student
+		var parent entity.ParentDetails
+
+		err := rows.Scan(&student.UUID, &student.ParentUUID, &student.SchoolUUID, &student.FirstName, &student.LastName,
+			&student.Gender, &student.Grade, &student.CreatedAt, &parent.UserUUID, &parent.FirstName,
+			&parent.LastName, &parent.Phone, &parent.Address)
 		if err != nil {
-			return nil, entity.ParentDetails{}, err
+			return nil, nil, err
 		}
 
 		students = append(students, student)
-
-		parentDetails = entity.ParentDetails{
-			UserUUID:  parentDetails.UserUUID,
-			FirstName: parentDetails.FirstName,
-			LastName:  parentDetails.LastName,
-			Phone:     parentDetails.Phone,
-			Address:   parentDetails.Address,
-		}
+		parents = append(parents, parent)
 	}
 
-	return students, parentDetails, nil
+	return students, parents, nil
 }
 
 func (repo *StudentRepository) FetchSpecStudentWithParents(studentUUID uuid.UUID, schoolUUID string) (entity.Student, entity.ParentDetails, error) {
@@ -100,7 +94,7 @@ func (repo *StudentRepository) FetchSpecStudentWithParents(studentUUID uuid.UUID
     
     err := repo.db.QueryRowx(query, studentUUID, schoolUUID).Scan(&student.UUID, &student.ParentUUID, &student.SchoolUUID, &student.FirstName,
         &student.LastName, &student.Gender, &student.Grade, &student.StudentAddress, &student.StudentPickupPoint, &student.CreatedAt,
-        &parentDetails.UserUUID, &student.UserEmail, &student.UserUsername, &parentDetails.FirstName, &parentDetails.LastName, &parentDetails.Phone, &parentDetails.Address)
+        &parentDetails.UserUUID, &student.UserUsername, &student.UserEmail, &parentDetails.FirstName, &parentDetails.LastName, &parentDetails.Phone, &parentDetails.Address)
     if err != nil {
         return entity.Student{}, entity.ParentDetails{}, err
     }

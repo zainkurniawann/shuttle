@@ -3,6 +3,8 @@ package handler
 import (
 	"encoding/json"
 	"fmt"
+	"log"
+
 	// "log"
 	"strconv"
 
@@ -312,37 +314,56 @@ func (handler *userHandler) GetAllPermittedDriver(c *fiber.Ctx) error {
 
 
 func (handler *userHandler) GetSpecPermittedDriver(c *fiber.Ctx) error {
+	log.Println("Start handling GetSpecPermittedDriver request")
+
 	id := c.Params("id")
-	role := c.Locals("role_code").(string)
+	log.Printf("Retrieved id from params: %s", id)
+
+	role, ok := c.Locals("role_code").(string)
+	if !ok {
+		log.Println("Failed to retrieve role_code from context")
+		return utils.BadRequestResponse(c, "Invalid role", nil)
+	}
+	log.Printf("Retrieved role_code from context: %s", role)
 
 	var user dto.UserResponseDTO
 	var err error
 
+	log.Printf("Fetching specific user details for id: %s", id)
 	_, err = handler.userService.GetSpecUserWithDetails(id)
 	if err != nil {
+		log.Printf("Failed to fetch user details for id: %s, error: %v", id, err)
 		logger.LogError(err, "Failed to fetch user", nil)
 		return utils.NotFoundResponse(c, "User not found", nil)
 	}
 
 	switch role {
 	case "SA":
+		log.Println("Role is SA, fetching driver from all schools")
 		user, err = handler.userService.GetSpecDriverFromAllSchools(id)
 	case "AS":
+		log.Println("Role is AS, verifying schoolUUID from context")
 		schoolUUID, ok := c.Locals("schoolUUID").(string)
 		if !ok {
+			log.Println("Failed to retrieve schoolUUID from context")
 			return utils.BadRequestResponse(c, "Token is invalid", nil)
 		}
+		log.Printf("Retrieved schoolUUID: %s", schoolUUID)
 
+		log.Println("Fetching driver for permitted school")
 		user, err = handler.userService.GetSpecDriverForPermittedSchool(id, schoolUUID)
 	default:
+		log.Println("Invalid role detected")
 		return utils.BadRequestResponse(c, "Invalid role", nil)
 	}
 
 	if err != nil {
+		log.Printf("Failed to fetch specific driver for id: %s, error: %v", id, err)
 		logger.LogError(err, "Failed to fetch specific driver", nil)
 		return utils.InternalServerErrorResponse(c, "Something went wrong, please try again later", nil)
 	}
 
+	log.Println("User fetched successfully")
 	return utils.SuccessResponse(c, "User fetched successfully", user)
 }
 

@@ -159,13 +159,21 @@ func (handler *routeHandler) GetSpecRouteByDriver(c *fiber.Ctx) error {
 func (handler *routeHandler) AddRoute(c *fiber.Ctx) error {
 	log.Println("Starting AddRoute handler")
 
-	// Ambil schoolUUID dari token
-	schoolUUIDStr, ok := c.Locals("schoolUUID").(string)
+	// Ambil userUUID dari token
+	userUUIDStr, ok := c.Locals("userUUID").(string)  // pastikan mengambil userUUID dari token
 	if !ok {
-		log.Println("Token does not contain school UUID")
-		return utils.InternalServerErrorResponse(c, "Token does not contain school UUID", nil)
+		log.Println("Token does not contain user UUID")
+		return utils.InternalServerErrorResponse(c, "Token does not contain user UUID", nil)
 	}
-	log.Printf("School UUID: %s", schoolUUIDStr)
+	log.Printf("User UUID: %s", userUUIDStr)
+
+	// Query untuk mendapatkan schoolUUID berdasarkan userUUID
+	schoolUUID, err := handler.routeService.GetSchoolUUIDByUserUUID(userUUIDStr)
+	if err != nil {
+		log.Printf("Error retrieving school UUID: %v", err)
+		return utils.InternalServerErrorResponse(c, "Error retrieving school UUID", nil)
+	}
+	log.Printf("School UUID: %s", schoolUUID)
 
 	// Ambil username dari token
 	username, ok := c.Locals("user_name").(string)
@@ -190,8 +198,8 @@ func (handler *routeHandler) AddRoute(c *fiber.Ctx) error {
 	}
 	log.Println("Validation passed")
 
-	// Panggil service untuk menambahkan route
-	err := handler.routeService.AddRoute(*route, schoolUUIDStr, username)
+	// Panggil service untuk menambahkan route dengan schoolUUID yang sudah diambil
+	err = handler.routeService.AddRoute(*route, schoolUUID, username)
 	if err != nil {
 		log.Printf("Error adding route: %v", err)
 		if err.Error() == "Student already assigned to a route in this school" {

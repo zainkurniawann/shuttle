@@ -12,6 +12,7 @@ import (
 	// "shuttle/models/dto"
 	"shuttle/models/dto"
 	"shuttle/models/entity"
+	// "shuttle/repositories"
 
 	"github.com/jmoiron/sqlx"
 	// "github.com/google/uuid"
@@ -24,6 +25,7 @@ type RouteRepositoryInterface interface {
 	FetchSpecRouteByDriver(driverUUID, studentUUID string) (*dto.RouteResponseByDriverDTO, error)
 	GetRouteByStudentAndSchool(studentUUID, schoolUUID string) (*entity.Route, error)
 	AddRoute(route entity.Route) error
+	GetSchoolUUIDByUserUUID(userUUID string, schoolUUID *string) error 
 	UpdateRoute(routeUUID string, route entity.Route) error
 	DeleteRoute(routeUUID string, username string) error
 	// GetRouteByID(routeID int64) (*entity.Route, error)
@@ -106,17 +108,37 @@ func (r *routeRepository) FetchAllRoutes() ([]entity.Route, error) {
 func (repository *routeRepository) FetchSpecRoute(routeUUID string) (entity.Route, error) {
 	log.Println("Starting GetRouteByUUID repository")
 
-	// Membuat query untuk mengambil route berdasarkan UUID
-	var route entity.Route
-	query := `SELECT route_uuid, driver_uuid, student_uuid, school_uuid, route_name, 
-		route_description, created_at, created_by, updated_at, updated_by
-		FROM route_jawa WHERE route_uuid = $1`
+	// Membuat query untuk mengambil route dengan join pada tabel users dan students
+	query := `
+		SELECT 
+			r.route_uuid,
+			r.driver_uuid,
+			u.user_username, -- Menambahkan user_username
+			r.student_uuid,
+			CONCAT(s.student_first_name, ' ', s.student_last_name) AS student_name, -- Gabungkan first_name dan last_name
+			r.school_uuid,
+			r.route_name,
+			r.route_description,
+			r.created_at,
+			r.created_by,
+			r.updated_at,
+			r.updated_by
+		FROM route_jawa r
+		LEFT JOIN users u ON r.driver_uuid = u.user_uuid
+		LEFT JOIN students s ON r.student_uuid = s.student_uuid
+		WHERE r.route_uuid = $1
+	`
 
-	// Menjalankan query
+	// Deklarasi variabel untuk menyimpan hasil
+	var route entity.Route
+
+	// Menjalankan query dan scan hasilnya
 	err := repository.DB.QueryRow(query, routeUUID).Scan(
 		&route.RouteUUID,
 		&route.DriverUUID,
+		&route.UserUsername,      // Menambahkan user_username
 		&route.StudentUUID,
+		&route.StudentName,       // Menambahkan student_name
 		&route.SchoolUUID,
 		&route.RouteName,
 		&route.RouteDescription,
@@ -245,6 +267,21 @@ func (r *routeRepository) AddRoute(route entity.Route) error {
 
 	return nil
 }
+
+// Fungsi di userService untuk mengambil schoolUUID berdasarkan userUUID
+func (r *routeRepository) GetSchoolUUIDByUserUUID(userUUID string, schoolUUID *string) error {
+	query := `
+		SELECT school_uuid
+		FROM school_admin_details
+		WHERE user_uuid = $1
+	`
+	err := r.DB.QueryRow(query, userUUID).Scan(schoolUUID)
+	if err != nil {
+		return fmt.Errorf("failed to get school UUID for user: %w", err)
+	}
+	return nil
+}
+
 
 func (r *routeRepository) UpdateRoute(routeUUID string, route entity.Route) error {
 	query := `

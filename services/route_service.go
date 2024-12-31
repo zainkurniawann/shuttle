@@ -19,6 +19,7 @@ type RouteServiceInterface interface {
 	GetAllRoutesByDriver(driverUUID string) ([]dto.RouteResponseByDriverDTO, error)
 	GetSpecRouteByDriver(driverUUID, studentUUID string) (*dto.RouteResponseByDriverDTO, error)
 	AddRoute(route dto.RouteRequestDTO, schoolUUID, username string) error
+	GetSchoolUUIDByUserUUID(userUUID string) (string, error)
 	UpdateRoute(routeUUID string, route dto.RouteRequestDTO, username string) error
 	DeleteRoute(routeUUID string, username string) error
 }
@@ -72,7 +73,6 @@ func (service *routeService) GetAllRoutes() ([]dto.RouteResponseDTO, error) {
 			UserUsername:     route.UserUsername, // Menambahkan UserUsername
 			StudentUUID:      route.StudentUUID.String(),
 			StudentName:      route.StudentName,   // Menambahkan StudentName
-			SchoolUUID:       route.SchoolUUID.String(),
 			RouteName:        route.RouteName,
 			RouteDescription: route.RouteDescription,
 			CreatedAt:        createdAt, // Menggunakan string
@@ -117,7 +117,9 @@ func (service *routeService) GetSpecRoute(routeUUID string) (dto.RouteResponseDT
 	return dto.RouteResponseDTO{
 		RouteUUID:        route.RouteUUID.String(),
 		DriverUUID:       route.DriverUUID.String(),
+		UserUsername:     route.UserUsername,
 		StudentUUID:      route.StudentUUID.String(),
+		StudentName:      route.StudentName,
 		SchoolUUID:       route.SchoolUUID.String(),
 		RouteName:        route.RouteName,
 		RouteDescription: route.RouteDescription,
@@ -182,6 +184,16 @@ func (service *routeService) AddRoute(route dto.RouteRequestDTO, schoolUUID, use
 
 	log.Println("Route added successfully")
 	return nil
+}
+
+func (s *routeService) GetSchoolUUIDByUserUUID(userUUID string) (string, error) {
+	var schoolUUID string
+	// Memanggil repository untuk mendapatkan schoolUUID berdasarkan userUUID
+	err := s.routeRepository.GetSchoolUUIDByUserUUID(userUUID, &schoolUUID)
+	if err != nil {
+		return "", fmt.Errorf("error retrieving school UUID: %w", err)
+	}
+	return schoolUUID, nil
 }
 
 func (service *routeService) UpdateRoute(routeUUID string, route dto.RouteRequestDTO, username string) error {

@@ -34,87 +34,64 @@ func NewStudentHttpHandler(studentService services.StudentService) StudentHandle
 }
 
 func (handler *studentHandler) GetAllStudentWithParents(c *fiber.Ctx) error {
-	// Ambil schoolUUID dari token
 	schoolUUIDStr, ok := c.Locals("schoolUUID").(string)
 	if !ok {
-		log.Println("ERROR: Token does not contain school UUID")
+		logger.LogError(nil, "Token does not contain school uuid", nil)
 		return utils.InternalServerErrorResponse(c, "Something went wrong, please try again later", nil)
 	}
-	log.Println("INFO: School UUID from token:", schoolUUIDStr)
 
-	// Ambil halaman dan limit dari query params
 	page, err := strconv.Atoi(c.Query("page", "1"))
 	if err != nil || page < 1 {
-		log.Println("ERROR: Invalid page number:", c.Query("page"))
 		return utils.BadRequestResponse(c, "Invalid page number", nil)
 	}
-	log.Println("INFO: Page number:", page)
 
 	limit, err := strconv.Atoi(c.Query("limit", "10"))
 	if err != nil || limit < 1 {
-		log.Println("ERROR: Invalid limit number:", c.Query("limit"))
 		return utils.BadRequestResponse(c, "Invalid limit number", nil)
 	}
-	log.Println("INFO: Limit number:", limit)
 
-	// Ambil sorting dari query params
 	sortField := c.Query("sort_by", "student_id")
 	sortDirection := c.Query("direction", "asc")
 
 	if sortDirection != "asc" && sortDirection != "desc" {
-		log.Println("ERROR: Invalid sort direction:", sortDirection)
 		return utils.BadRequestResponse(c, "Invalid sort direction, use 'asc' or 'desc'", nil)
 	}
-	log.Println("INFO: Sort direction:", sortDirection)
 
 	if !isValidSortFieldForStudents(sortField) {
-		log.Println("ERROR: Invalid sort field:", sortField)
 		return utils.BadRequestResponse(c, "Invalid sort field", nil)
 	}
-	log.Println("INFO: Sort field:", sortField)
 
-	// Ambil data siswa dengan parents
 	students, totalItems, err := handler.studentService.GetAllStudentsWithParents(page, limit, sortField, sortDirection, schoolUUIDStr)
 	if err != nil {
-		log.Println("ERROR: Failed to fetch paginated students:", err)
+		logger.LogError(err, "Failed to fetch paginated students", nil)
 		return utils.InternalServerErrorResponse(c, "Something went wrong, please try again later", nil)
 	}
-	log.Println("INFO: Fetched students data successfully")
 
-	// Hitung total pages
 	totalPages := (totalItems + limit - 1) / limit
-	log.Println("INFO: Total pages:", totalPages)
 
-	// Validasi halaman yang diminta
 	if page > totalPages {
 		if totalItems > 0 {
-			log.Println("ERROR: Page number out of range:", page)
 			return utils.BadRequestResponse(c, "Page number out of range", nil)
 		} else {
 			page = 1
 		}
 	}
-	log.Println("INFO: Adjusted page number:", page)
 
 	start := (page-1)*limit + 1
 	if totalItems == 0 || start > totalItems {
 		start = 0
 	}
-	log.Println("INFO: Start index:", start)
 
 	end := start + len(students) - 1
 	if end > totalItems {
 		end = totalItems
 	}
-	log.Println("INFO: End index:", end)
 
 	if len(students) == 0 {
 		start = 0
 		end = 0
 	}
-	log.Println("INFO: Showing students:", start, "to", end)
 
-	// Format response
 	response := fiber.Map{
 		"data": students,
 		"meta": fiber.Map{
@@ -125,8 +102,6 @@ func (handler *studentHandler) GetAllStudentWithParents(c *fiber.Ctx) error {
 			"showing":        fmt.Sprintf("Showing %d-%d of %d", start, end, totalItems),
 		},
 	}
-
-	log.Println("INFO: Responding with student data")
 
 	return utils.SuccessResponse(c, "Students fetched successfully", response)
 }
@@ -219,7 +194,7 @@ func (handler *studentHandler) UpdateSchoolStudentWithParents(c *fiber.Ctx) erro
 	id := c.Params("id")
 	log.Println("INFO: Received student ID from URL parameters:", id)
 
-	student := new(dto.SchoolStudentParentRequestDTO)
+	student := new(dto.StudentRequestDTO)
 	if err := c.BodyParser(student); err != nil {
 		log.Println("ERROR: Failed to parse request body:", err)
 		return utils.BadRequestResponse(c, "Invalid request data", nil)
@@ -232,44 +207,23 @@ func (handler *studentHandler) UpdateSchoolStudentWithParents(c *fiber.Ctx) erro
 	}
 	log.Println("INFO: Student data successfully validated")
 
-	// Validasi tambahan untuk field student_address dan student_pickup_point
-	if student.Student.StudentAddress == "" {
-		log.Println("ERROR: Student address is missing")
-		return utils.BadRequestResponse(c, "Address is required", nil)
-	}
-	log.Println("INFO: Student address is provided:", student.Student.StudentAddress)
-
-	// Validasi pickup point: pastikan ada latitude dan longitude
-	if student.Student.StudentPickupPoint == nil || 
-		student.Student.StudentPickupPoint["latitude"] == 0 || 
-		student.Student.StudentPickupPoint["longitude"] == 0 {
+	// Validasi tambahan untuk pickup point
+	if student.StudentPickupPoint["latitude"] == 0 || student.StudentPickupPoint["longitude"] == 0 {
 		log.Println("ERROR: Invalid pickup point (latitude or longitude missing)")
 		return utils.BadRequestResponse(c, "Valid latitude and longitude are required for pickup point", nil)
 	}
-	log.Println("INFO: Pickup point validated:", student.Student.StudentPickupPoint)
-
-	if reflect.DeepEqual(dto.UserRequestsDTO{}, student.Parent) {
-		log.Println("ERROR: Parent details are missing")
-		return utils.BadRequestResponse(c, "Parent details are required", nil)
-	}
-	log.Println("INFO: Parent details provided:", student.Parent)
+	log.Println("INFO: Pickup point validated:", student.StudentPickupPoint)
 
 	// Call to service layer to update student data
-	log.Println("INFO: Updating student data in service layer:", map[string]interface{}{"studentID": id, "schoolUUID": schoolUUIDStr, "username": username})
+	log.Println("INFO: Updating student data in service layer")
 	if err := handler.studentService.UpdateSchoolStudentWithParents(id, *student, schoolUUIDStr, username); err != nil {
-		if customErr, ok := err.(*errors.CustomError); ok {
-			log.Println("ERROR: Custom error occurred while updating student:", err)
-			return utils.ErrorResponse(c, customErr.StatusCode, strings.ToUpper(string(customErr.Message[0]))+customErr.Message[1:], nil)
-		}
 		log.Println("ERROR: Failed to update student in service layer:", err)
 		return utils.InternalServerErrorResponse(c, "Something went wrong, please try again later", nil)
 	}
-	log.Println("INFO: Student data successfully updated:", id)
+	log.Println("INFO: Student data successfully updated")
 
 	return utils.SuccessResponse(c, "Student updated successfully", nil)
 }
-
-
 
 func (handler *studentHandler) DeleteSchoolStudentWithParentsIfNeccessary(c *fiber.Ctx) error {
 	id := c.Params("id")
