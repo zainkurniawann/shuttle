@@ -3,6 +3,7 @@ package services
 import (
 	"database/sql"
 	"fmt"
+	"log"
 	"shuttle/models/dto"
 	"shuttle/models/entity"
 	"shuttle/repositories"
@@ -12,7 +13,7 @@ import (
 )
 
 type ShuttleServiceInterface interface {
-	GetShuttleTrackByParent(parentUUID uuid.UUID, status string, interval string) ([]dto.ShuttleResponse, error)
+	GetShuttleTrackByParent(parentUUID uuid.UUID) ([]dto.ShuttleResponse, error)
 	GetAllShuttleByParent(parentUUID uuid.UUID) ([]dto.ShuttleAllResponse, error)
 	GetAllShuttleByDriver(driverUUID uuid.UUID) ([]dto.ShuttleAllResponse, error)
 	GetSpecShuttle(shuttleUUID uuid.UUID) ([]dto.ShuttleSpecResponse, error)
@@ -30,19 +31,23 @@ func NewShuttleService(shuttleRepository repositories.ShuttleRepositoryInterface
 	}
 }
 
-func (s *ShuttleService) GetShuttleTrackByParent(parentUUID uuid.UUID, status string, interval string) ([]dto.ShuttleResponse, error) {
+func (s *ShuttleService) GetShuttleTrackByParent(parentUUID uuid.UUID) ([]dto.ShuttleResponse, error) {
+	log.Println("Fetching shuttle track from repository for parentUUID:", parentUUID)
+
 	// Panggil repository dengan parameter baru
-	shuttles, err := s.shuttleRepository.FetchShuttleTrackByParent(status, interval)
+	shuttles, err := s.shuttleRepository.FetchShuttleTrackByParent(parentUUID)
 	if err != nil {
+		log.Println("Error fetching shuttle track from repository:", err)
 		return nil, err
 	}
 
+	log.Println("Fetched shuttle data:", shuttles)
 	responses := make([]dto.ShuttleResponse, 0, len(shuttles))
 	for _, shuttle := range shuttles {
-		response := dto.ShuttleResponse{
+		response := &dto.ShuttleResponse{
 			StudentUUID:    shuttle.StudentUUID,
 			ShuttleUUID:    shuttle.ShuttleUUID,
-			StudentName:    shuttle.StudentName,
+			StudentFirstName:    shuttle.StudentFirstName,
 			StudentLastName: shuttle.StudentLastName,
 			ParentUUID:     shuttle.ParentUUID,
 			SchoolUUID:     shuttle.SchoolUUID,
@@ -51,12 +56,11 @@ func (s *ShuttleService) GetShuttleTrackByParent(parentUUID uuid.UUID, status st
 			CreatedAt:      shuttle.CreatedAt,
 			CurrentDate:    shuttle.CurrentDate,
 		}
-		responses = append(responses, response)
+		responses = append(responses, *response)
 	}
 
 	return responses, nil
 }
-
 
 func (s *ShuttleService) GetAllShuttleByParent(parentUUID uuid.UUID) ([]dto.ShuttleAllResponse, error) {
 	// Fetch data from the repository
@@ -117,13 +121,18 @@ func (s *ShuttleService) GetAllShuttleByDriver(driverUUID uuid.UUID) ([]dto.Shut
 }
 
 func (s *ShuttleService) GetSpecShuttle(shuttleUUID uuid.UUID) ([]dto.ShuttleSpecResponse, error) {
+	log.Println("Fetching shuttle spec data from repository for shuttleUUID:", shuttleUUID)
+
 	shuttles, err := s.shuttleRepository.GetSpecShuttle(shuttleUUID)
 	if err != nil {
+		log.Println("Error fetching shuttle data from repository:", err)
 		return nil, fmt.Errorf("failed to fetch shuttle data: %w", err)
 	}
 
+	log.Println("Fetched shuttle data from repository:", shuttles)
 	responses := make([]dto.ShuttleSpecResponse, 0, len(shuttles))
 	for _, shuttle := range shuttles {
+		log.Println("Processing shuttle:", shuttle)
 		response := dto.ShuttleSpecResponse{
 			StudentUUID:       shuttle.StudentUUID,
 			ShuttleUUID:       shuttle.ShuttleUUID,
@@ -148,28 +157,37 @@ func (s *ShuttleService) GetSpecShuttle(shuttleUUID uuid.UUID) ([]dto.ShuttleSpe
 			VehicleColor:      shuttle.VehicleColor,
 			VehicleNumber:     shuttle.VehicleNumber,
 		}
-
 		responses = append(responses, response)
 	}
 
+	log.Println("Successfully processed shuttle responses:", responses)
 	return responses, nil
 }
 
 func (s *ShuttleService) AddShuttle(req dto.ShuttleRequest, driverUUID, createdBy string) error {
+	// Log: Parsing studentUUID
 	studentUUID, err := uuid.Parse(req.StudentUUID)
 	if err != nil {
+		log.Printf("AddShuttle: Failed to parse StudentUUID - %s", req.StudentUUID)
 		return err
 	}
+	log.Printf("AddShuttle: Parsed studentUUID - %s", studentUUID.String())
 
+	// Log: Parsing driverUUID
 	driverUUIDParsed, err := uuid.Parse(driverUUID)
 	if err != nil {
+		log.Printf("AddShuttle: Failed to parse driverUUID - %s", driverUUID)
 		return err
 	}
+	log.Printf("AddShuttle: Parsed driverUUID - %s", driverUUIDParsed.String())
 
+	// Log: Set default status if empty
 	if req.Status == "" {
 		req.Status = "waiting_to_be_taken_to_school"
+		log.Println("AddShuttle: Set default status to 'waiting_to_be_taken_to_school'")
 	}
 
+	// Log: Create shuttle entity
 	shuttle := entity.Shuttle{
 		ShuttleID:   time.Now().UnixMilli()*1e6 + int64(uuid.New().ID()%1e6),
 		ShuttleUUID: uuid.New(),
@@ -178,11 +196,15 @@ func (s *ShuttleService) AddShuttle(req dto.ShuttleRequest, driverUUID, createdB
 		Status:      req.Status,
 		CreatedAt:   sql.NullTime{Time: time.Now(), Valid: true},
 	}
+	log.Printf("AddShuttle: Created shuttle entity with ShuttleID - %d", shuttle.ShuttleID)
 
+	// Log: Attempt to save shuttle to repository
 	err = s.shuttleRepository.SaveShuttle(shuttle)
 	if err != nil {
+		log.Println("AddShuttle: Failed to save shuttle")
 		return err
 	}
+	log.Println("AddShuttle: Shuttle saved successfully")
 
 	return nil
 }

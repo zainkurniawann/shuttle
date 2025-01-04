@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"log"
 	"shuttle/models/dto"
 	"shuttle/models/entity"
 
@@ -12,16 +13,16 @@ import (
 )
 
 type ShuttleRepositoryInterface interface {
-    FetchShuttleTrackByParent(status string, interval string) ([]dto.ShuttleResponse, error)
+	FetchShuttleTrackByParent(parentUUID uuid.UUID) ([]dto.ShuttleResponse, error)
 	FetchAllShuttleByParent(parentUUID uuid.UUID) ([]dto.ShuttleAllResponse, error)
 	FetchAllShuttleByDriver(driverUUID uuid.UUID) ([]dto.ShuttleAllResponse, error)
 	GetSpecShuttle(shuttleUUID uuid.UUID) ([]dto.ShuttleSpecResponse, error)
-    SaveShuttle(shuttle entity.Shuttle) error
+	SaveShuttle(shuttle entity.Shuttle) error
 	UpdateShuttleStatus(shuttleUUID uuid.UUID, status string) error
 }
 
 type ShuttleRepository struct {
-    DB *sqlx.DB
+	DB *sqlx.DB
 }
 
 func NewShuttleRepository(DB *sqlx.DB) ShuttleRepositoryInterface {
@@ -30,7 +31,9 @@ func NewShuttleRepository(DB *sqlx.DB) ShuttleRepositoryInterface {
 	}
 }
 
-func (r *ShuttleRepository) FetchShuttleTrackByParent(status string, interval string) ([]dto.ShuttleResponse, error) {
+func (r *ShuttleRepository) FetchShuttleTrackByParent(parentUUID uuid.UUID) ([]dto.ShuttleResponse, error) {
+	log.Println("Executing query to fetch shuttle track for parentUUID:", parentUUID)
+
 	query := `
 		SELECT 
 			st.student_uuid,
@@ -41,21 +44,23 @@ func (r *ShuttleRepository) FetchShuttleTrackByParent(status string, interval st
 			s.school_uuid,
 			sc.school_name,
 			st.status AS shuttle_status,
-			st.created_at
+			st.created_at,
+			CURRENT_DATE AS current_date
 		FROM shuttle st
 		LEFT JOIN students s 
-			ON s.student_uuid = st.student_uuid
+			ON s.student_uuid = st.student_uuid AND DATE(st.created_at) = CURRENT_DATE
 		JOIN schools sc 
 			ON s.school_uuid = sc.school_uuid
-		WHERE st.status = $1 AND st.created_at >= NOW() - INTERVAL $2
+		WHERE s.parent_uuid = $1
 	`
-
 	var shuttles []dto.ShuttleResponse
-	err := r.DB.Select(&shuttles, query, status, interval)
+	err := r.DB.Select(&shuttles, query, parentUUID)
 	if err != nil {
+		log.Println("Error executing query:", err)
 		return nil, err
 	}
 
+	log.Println("Shuttle track fetched from database:", shuttles)
 	return shuttles, nil
 }
 
@@ -79,7 +84,7 @@ func (r *ShuttleRepository) FetchAllShuttleByParent(parentUUID uuid.UUID) ([]dto
 			ON st.student_uuid = s.student_uuid
 		LEFT JOIN schools sc 
 			ON s.school_uuid = sc.school_uuid
-		WHERE s.parent_uuid = $1
+		WHERE s.parent_uuid = $1 ORDER BY st.created_at ASC
 	`
 	var shuttles []dto.ShuttleAllResponse
 	err := r.DB.Select(&shuttles, query, parentUUID)
@@ -110,7 +115,7 @@ func (r *ShuttleRepository) FetchAllShuttleByDriver(driverUUID uuid.UUID) ([]dto
 			ON st.student_uuid = s.student_uuid
 		LEFT JOIN schools sc 
 			ON s.school_uuid = sc.school_uuid
-		WHERE st.driver_uuid = $1
+		WHERE st.driver_uuid = $1 ORDER BY st.created_at DESC
 	`
 	var shuttles []dto.ShuttleAllResponse
 	err := r.DB.Select(&shuttles, query, driverUUID)
@@ -122,6 +127,8 @@ func (r *ShuttleRepository) FetchAllShuttleByDriver(driverUUID uuid.UUID) ([]dto
 }
 
 func (r *ShuttleRepository) GetSpecShuttle(shuttleUUID uuid.UUID) ([]dto.ShuttleSpecResponse, error) {
+	log.Println("Executing query to fetch shuttle spec for shuttleUUID:", shuttleUUID)
+
 	query := `
 		SELECT 
 			st.student_uuid,
@@ -162,25 +169,47 @@ func (r *ShuttleRepository) GetSpecShuttle(shuttleUUID uuid.UUID) ([]dto.Shuttle
 	var shuttles []dto.ShuttleSpecResponse
 	err := r.DB.Select(&shuttles, query, shuttleUUID)
 	if err != nil {
+		log.Println("Error executing query:", err)
 		return nil, fmt.Errorf("failed to fetch shuttle data from database: %w", err)
 	}
 
+	log.Println("Shuttle data fetched from database:", shuttles)
 	for i := range shuttles {
 		if err := json.Unmarshal([]byte(shuttles[i].StudentPickupPoint), &shuttles[i].StudentPickupPoint); err != nil {
+			log.Println("Error unmarshalling StudentPickupPoint:", err)
 		}
 		if err := json.Unmarshal([]byte(shuttles[i].SchoolPoint), &shuttles[i].SchoolPoint); err != nil {
+			log.Println("Error unmarshalling SchoolPoint:", err)
 		}
 	}
 
+	log.Println("Successfully processed shuttle data:", shuttles)
 	return shuttles, nil
 }
 
 func (r *ShuttleRepository) SaveShuttle(shuttle entity.Shuttle) error {
+	// Log: Logging query execution details
+	log.Printf("SaveShuttle: Preparing to execute query for shuttleID %d", shuttle.ShuttleID)
+
 	query := `
 		INSERT INTO shuttle (shuttle_id, shuttle_uuid, student_uuid, driver_uuid, status, created_at)
 		VALUES (:shuttle_id, :shuttle_uuid, :student_uuid, :driver_uuid, :status, :created_at)`
+
+	// Log: Log shuttle details before execution
+	log.Printf("SaveShuttle: Shuttle details - shuttle_id: %d, shuttle_uuid: %s, student_uuid: %s, driver_uuid: %s, status: %s, created_at: %s",
+		shuttle.ShuttleID, shuttle.ShuttleUUID.String(), shuttle.StudentUUID.String(), shuttle.DriverUUID.String(), shuttle.Status, shuttle.CreatedAt.Time.String())
+
 	_, err := r.DB.NamedExec(query, shuttle)
-	return err
+	if err != nil {
+		// Log: Error executing query
+		log.Printf("SaveShuttle: Error executing query for shuttleID %d - %s", shuttle.ShuttleID, err.Error())
+		return err
+	}
+
+	// Log: Successful insertion
+	log.Printf("SaveShuttle: Shuttle with shuttleID %d inserted successfully", shuttle.ShuttleID)
+
+	return nil
 }
 
 func (r *ShuttleRepository) UpdateShuttleStatus(shuttleUUID uuid.UUID, status string) error {

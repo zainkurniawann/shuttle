@@ -10,7 +10,7 @@ type ShuttleRequest struct {
 type ShuttleResponse struct {
 	StudentUUID     string `db:"student_uuid" json:"student_uuid"`
 	ShuttleUUID     string `db:"shuttle_uuid" json:"shuttle_uuid"`
-	StudentName     string `db:"student_first_name" json:"student_first_name"`
+	StudentFirstName string `db:"student_first_name" json:"student_first_name"`
 	StudentLastName string `db:"student_last_name" json:"student_last_name"`
 	ParentUUID      string `db:"parent_uuid" json:"parent_uuid"`
 	SchoolUUID      string `db:"school_uuid" json:"school_uuid"`

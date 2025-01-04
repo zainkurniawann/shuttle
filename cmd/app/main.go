@@ -3,6 +3,7 @@ package main
 import (
 	"shuttle/databases"
 	"shuttle/routes"
+	"shuttle/utils"
 	zerolog "shuttle/logger"
 
 	"github.com/gofiber/fiber/v2"
@@ -12,6 +13,7 @@ import (
 )
 
 func main() {
+	utils.InitFirebase()
 	zerolog.InitLogger()
 
 	app := fiber.New()
