@@ -20,7 +20,7 @@ type VehicleRepositoryInterface interface {
 	FetchSpecVehicleForPermittedSchool(uuid string) (entity.Vehicle, entity.School, entity.DriverDetails, error)
 
 	SaveVehicle(vehicle entity.Vehicle) error
-	SaveVehicleForPermittedSchool(vehicle entity.Vehicle) error
+	SaveSchoolVehicleWithDriver(tx *sqlx.Tx, vehicle entity.Vehicle) error
 	UpdateVehicle(vehicle entity.Vehicle) error
 	DeleteVehicle(vehicle entity.Vehicle) error
 }
@@ -393,7 +393,7 @@ func (repository *VehicleRepository) SaveVehicle(vehicle entity.Vehicle) error {
 	return nil
 }
 
-func (repository *VehicleRepository) SaveVehicleForPermittedSchool(vehicle entity.Vehicle) error {
+func (repository *VehicleRepository) SaveSchoolVehicleWithDriver(tx *sqlx.Tx, vehicle entity.Vehicle) error {
     log.Println("Inserting vehicle into database:", vehicle)
 
     query := `

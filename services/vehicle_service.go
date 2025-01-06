@@ -1,6 +1,7 @@
 package services
 
 import (
+	"fmt"
 	"log"
 	"shuttle/errors"
 	"shuttle/models/dto"
@@ -17,13 +18,15 @@ type VehicleServiceInterface interface {
 	GetAllVehicles(page, limit int, sortField, sortDirection string) ([]dto.VehicleResponseDTO, int, error)
 	GetAllVehiclesForPermittedSchool(page, limit int, sortField, sortDirection string) ([]dto.VehicleResponseDTO, int, error)
 	AddVehicle(req dto.VehicleRequestDTO) error
-	AddVehicleForPermittedSchool(req dto.VehicleRequestDTO, role, schoolUUID string) error
+	AddSchoolVehicleWithDriver(vehicle dto.VehicleDriverRequestDTO, driver dto.DriverDetailsRequestsDTO, schoolUUID string, username string) error
 	UpdateVehicle(id string, req dto.VehicleRequestDTO, username string) error
 	DeleteVehicle(id string, username string) error
 }
 
 type VehicleService struct {
+	userService       UserServiceInterface
 	vehicleRepository repositories.VehicleRepositoryInterface
+	userRepository    repositories.UserRepositoryInterface
 }
 
 func NewVehicleService(vehicleRepository repositories.VehicleRepositoryInterface) VehicleService {
@@ -256,109 +259,160 @@ func (service *VehicleService) AddVehicle(req dto.VehicleRequestDTO) error {
 	return nil
 }
 
-func (service *VehicleService) AddVehicleForPermittedSchool(req dto.VehicleRequestDTO, role, schoolUUID string) error {
-    log.Println("Start adding vehicle")
+func (service *VehicleService) AddSchoolVehicleWithDriver(vehicle dto.VehicleDriverRequestDTO, driver dto.DriverDetailsRequestsDTO, schoolUUID string, username string) error {
+	var driverID uuid.UUID
 
-    // Membuat entitas vehicle
-    vehicle := entity.Vehicle{
-        ID:            time.Now().UnixMilli()*1e6 + int64(uuid.New().ID()%1e6),
+	// Periksa apakah email driver sudah ada di database
+	driverExists, err := service.userRepository.CheckEmailExist("", vehicle.Driver.Email)
+	if err != nil {
+		return err
+	}
+
+	// Mulai transaksi
+	tx, err := service.userRepository.BeginTransaction()
+	if err != nil {
+		return err
+	}
+
+	var transactionError error
+	defer func() {
+		if transactionError != nil {
+			tx.Rollback()
+		} else {
+			tx.Commit()
+		}
+	}()
+
+	if !driverExists {
+		// Jika driver belum ada, tambahkan data driver baru
+		newDriver := &dto.UserRequestsDTO{
+			Username:  vehicle.Driver.Username,
+			FirstName: vehicle.Driver.FirstName,
+			LastName:  vehicle.Driver.LastName,
+			Gender:    vehicle.Driver.Gender,
+			Email:     vehicle.Driver.Email,
+			Password:  vehicle.Driver.Password,
+			Role:      dto.Role(entity.Driver),
+			RoleCode:  "D",
+			Phone:     vehicle.Driver.Phone,
+			Address:   vehicle.Driver.Address,
+		}
+
+		driverID, err = service.userService.AddUser(*newDriver, username)
+		if err != nil {
+			transactionError = err
+			return transactionError
+		}
+	} else {
+		// Jika driver sudah ada, ambil UUID-nya
+		driverID, err = service.userRepository.FetchUUIDByEmail(vehicle.Driver.Email)
+		if err != nil {
+			transactionError = err
+			return transactionError
+		}
+	}
+
+	// Membuat entitas kendaraan
+	newVehicle := &entity.Vehicle{
+		ID:            time.Now().UnixMilli()*1e6 + int64(uuid.New().ID()%1e6),
         UUID:          uuid.New(),
+        VehicleName:   vehicle.Vehicle.Name,
+        VehicleNumber: vehicle.Vehicle.Number,
+        VehicleType:   vehicle.Vehicle.Type,
+        VehicleColor:  vehicle.Vehicle.Color,
+        VehicleSeats:  vehicle.Vehicle.Seats,
+        VehicleStatus: vehicle.Vehicle.Status,
+    }
+
+	// Simpan data kendaraan
+	err = service.vehicleRepository.SaveSchoolVehicleWithDriver(tx, *newVehicle)
+	if err != nil {
+		transactionError = err
+		return transactionError
+	}
+
+	schoolUUIDParsed, err := uuid.Parse(schoolUUID)
+	if err != nil {
+		return fmt.Errorf("invalid school UUID: %v", err)
+	}
+
+	// // Parse schoolUUID dan buat pointer ke uuid.UUID
+	// schoolUUIDParsed := uuid.Must(uuid.Parse(schoolUUID))
+
+	// Membuat entitas DriverDetails
+	driverDetails := &entity.DriverDetails{
+		UserUUID:    driverID,
+		SchoolUUID:  &schoolUUIDParsed, // Menggunakan pointer
+		VehicleUUID: &newVehicle.UUID,
+		LicenseNumber: driver.LicenseNumber,
+	}
+
+	// Simpan data DriverDetails dengan transaksi
+	err = service.userRepository.SaveDriverDetails(tx, *driverDetails, driverID, nil)
+	if err != nil {
+		transactionError = err
+		return transactionError
+	}
+
+	return nil
+}
+
+func (service *VehicleService) UpdateVehicle(id string, req dto.VehicleRequestDTO, username string) error {
+    log.Println("Start updating vehicle with ID:", id)
+
+    parsedUUID, err := uuid.Parse(id)
+    if err != nil {
+        log.Println("Error parsing vehicle UUID:", err)
+        return err
+    }
+
+    vehicle := entity.Vehicle{
+        UUID:          parsedUUID,
         VehicleName:   req.Name,
         VehicleNumber: req.Number,
         VehicleType:   req.Type,
         VehicleColor:  req.Color,
         VehicleSeats:  req.Seats,
         VehicleStatus: req.Status,
+        UpdatedAt:     toNullTime(time.Now()),
+        UpdatedBy:     toNullString(username),
     }
-    log.Printf("Vehicle entity created: %+v\n", vehicle)
+    log.Println("Vehicle entity to be updated:", vehicle)
 
-    // Gunakan schoolUUID yang sudah ada di context
-    if role == "AS" {
-        log.Println("Role is schooladmin, using school_uuid from token")
-        if schoolUUID != "" {
-            schoolUUIDParsed, err := uuid.Parse(schoolUUID)
-            if err != nil {
-                log.Println("Error parsing school UUID:", err)
-                return errors.New("Invalid school UUID", 400)
-            }
-            vehicle.SchoolUUID = &schoolUUIDParsed
-            log.Println("School UUID parsed and assigned to vehicle:", schoolUUIDParsed)
-        } else {
-            log.Println("School UUID is required for schooladmin")
-            return errors.New("School UUID is required for schooladmin", 400)
+    if req.School != "" {
+        schoolUUID, err := uuid.Parse(req.School)
+        if err != nil {
+            log.Println("Error parsing school UUID:", err)
+            return err
         }
+        vehicle.SchoolUUID = &schoolUUID
     } else {
-        log.Println("Non-schooladmin role, using provided school UUID or nil")
+        vehicle.SchoolUUID = nil
     }
+    log.Println("School UUID set to:", vehicle.SchoolUUID)
 
-    // Cek apakah vehicle number sudah ada
-    log.Println("Checking if vehicle number exists:", vehicle.VehicleNumber)
-    isExistingVehicleNumber, err := service.vehicleRepository.CheckVehicleNumberExists("", vehicle.VehicleNumber)
+    // Cek apakah nomor kendaraan sudah ada
+    isExistingVehicleNumber, err := service.vehicleRepository.CheckVehicleNumberExists(id, vehicle.VehicleNumber)
     if err != nil {
-        log.Println("Error checking vehicle number:", err)
+        log.Println("Error checking if vehicle number exists:", err)
         return err
     }
 
     if isExistingVehicleNumber {
-        log.Println("Vehicle number already exists:", vehicle.VehicleNumber)
+        log.Println("Vehicle number already exists")
         return errors.New("Vehicle number already exists", 400)
     }
-    log.Println("Vehicle number is unique, proceeding to save")
+    log.Println("Vehicle number is unique")
 
-    // Simpan kendaraan
-    log.Println("Saving vehicle to database")
-    err = service.vehicleRepository.SaveVehicleForPermittedSchool(vehicle)
+    // Update kendaraan
+    err = service.vehicleRepository.UpdateVehicle(vehicle)
     if err != nil {
-        log.Println("Error saving vehicle:", err)
+        log.Println("Error updating vehicle:", err)
         return err
     }
-    log.Println("Vehicle saved successfully")
+
+    log.Println("Vehicle updated successfully")
     return nil
-}
-
-func (service *VehicleService) UpdateVehicle(id string, req dto.VehicleRequestDTO, username string) error {
-	parsedUUID, err := uuid.Parse(id)
-	if err != nil {
-		return err
-	}
-
-	vehicle := entity.Vehicle{
-		UUID:          parsedUUID,
-		VehicleName:   req.Name,
-		VehicleNumber: req.Number,
-		VehicleType:   req.Type,
-		VehicleColor:  req.Color,
-		VehicleSeats:  req.Seats,
-		VehicleStatus: req.Status,
-		UpdatedAt:     toNullTime(time.Now()),
-		UpdatedBy:     toNullString(username),
-	}
-
-	if req.School != "" {
-		schoolUUID, err := uuid.Parse(req.School)
-		if err != nil {
-			return err
-		}
-		vehicle.SchoolUUID = &schoolUUID
-	} else {
-		vehicle.SchoolUUID = nil
-	}
-
-	isExistingVehicleNumber, err := service.vehicleRepository.CheckVehicleNumberExists(id, vehicle.VehicleNumber)
-	if err != nil {
-		return err
-	}
-
-	if isExistingVehicleNumber {
-		return errors.New("Vehicle number already exists", 400)
-	}
-
-	err = service.vehicleRepository.UpdateVehicle(vehicle)
-	if err != nil {
-		return err
-	}
-
-	return nil
 }
 
 func (service *VehicleService) DeleteVehicle(id string, username string) error {

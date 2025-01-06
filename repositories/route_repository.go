@@ -159,7 +159,7 @@ func (repo *routeRepository) FetchAllRoutesByDriver(driverUUID string) ([]dto.Ro
 			st.status AS shuttle_status,
 			sc.school_name,
 			sc.school_point
-		FROM route_jawa r
+		FROM route_assignment r
 		LEFT JOIN students s ON r.student_uuid = s.student_uuid
 		LEFT JOIN schools sc ON r.school_uuid = sc.school_uuid
 		LEFT JOIN shuttle st ON r.student_uuid = st.student_uuid AND DATE(st.created_at) = CURRENT_DATE
