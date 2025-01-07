@@ -9,9 +9,15 @@ import (
 type RouteAssignment struct {
 	RouteID          int64          `db:"route_id"`
 	RouteUUID        uuid.UUID      `db:"route_uuid"`
+	RouteNameUUID	string
 	DriverUUID		 uuid.UUID		`db:"driver_uuid"`
+    DriverFirstName   string
+    DriverLastName    string
 	UserUsername 	string			`json:"user_username"`
 	StudentUUID		 uuid.UUID		`db:"Student_uuid"`
+	StudentFirstName  string
+    StudentLastName   string
+	StudentOrder	string
 	StudentName		string			`json:"student_name"`
 	SchoolUUID       uuid.UUID      `db:"school_uuid"`
 	RouteName        string         `db:"route_name"`

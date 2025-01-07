@@ -129,10 +129,10 @@ func Route(r *fiber.App, db *sqlx.DB) {
 	protectedSchoolAdmin.Delete("/vehicle/delete/:id", vehicleHandler.DeleteVehicle)
 
 	// ROUTE FOR SCHOOL ADMIN
-	protectedSchoolAdmin.Get("/routes/all", routeHandler.GetAllRoutes)
-	protectedSchoolAdmin.Get("/route/:id", routeHandler.GetSpecRoute)
+	protectedSchoolAdmin.Get("/routes/all", routeHandler.GetAllRoutesByAS)
+	protectedSchoolAdmin.Get("/route/:id", routeHandler.GetSpecRouteByAS)
 	protectedSchoolAdmin.Post("/route/add", routeHandler.AddRoute)
-	// protectedSchoolAdmin.Put("/route/update/:id", routeHandler.UpdateRoute)
+	protectedSchoolAdmin.Put("/route/update/:id", routeHandler.UpdateRoute)
 	protectedSchoolAdmin.Delete("/route/delete/:id", routeHandler.DeleteRoute)
 
 	//ROUTE FOR DRIVER

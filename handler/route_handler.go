@@ -1,7 +1,6 @@
 package handler
 
 import (
-	"log"
 	"shuttle/models/dto"
 	"shuttle/services"
 	"shuttle/utils"
@@ -11,13 +10,12 @@ import (
 )
 
 type RouteHandlerInterface interface {
-	GetSpecRoute(c *fiber.Ctx) error
-	GetAllRoutes(c *fiber.Ctx) error
-	// GetSpecRoute(c *fiber.Ctx) error
+	GetAllRoutesByAS(c *fiber.Ctx) error
+	GetSpecRouteByAS(c *fiber.Ctx) error
 	GetAllRoutesByDriver(c *fiber.Ctx) error
 	GetSpecRouteByDriver(c *fiber.Ctx) error 
 	AddRoute(c *fiber.Ctx) error
-	// UpdateRoute(c *fiber.Ctx) error
+	UpdateRoute(c *fiber.Ctx) error
 	DeleteRoute(c *fiber.Ctx) error
 }
 
@@ -31,283 +29,185 @@ func NewRouteHttpHandler(routeService services.RouteServiceInterface) RouteHandl
 	}
 }
 
-func (handler *routeHandler) GetSpecRoute(c *fiber.Ctx) error {
-    driverUUID := c.Params("id")
+func (handler *routeHandler) GetAllRoutesByAS(c *fiber.Ctx) error {
 	schoolUUID, ok := c.Locals("schoolUUID").(string)
-    if !ok {
-        return utils.BadRequestResponse(c, "Invalid token or schoolUUID", nil)
-    }
-    if driverUUID == "" || schoolUUID == "" {
-        return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-            "error": "driver_uuid and school_uuid are required",
-        })
-    }
+	if !ok {
+		return utils.BadRequestResponse(c, "Invalid token or schoolUUID", nil)
+	}
 
-    routes, err := handler.routeService.GetSpecRoute(driverUUID, schoolUUID)
-    if err != nil {
-        return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-            "error": err.Error(),
-        })
-    }
-
-    return c.Status(fiber.StatusOK).JSON(routes)
-}
-
-func (handler *routeHandler) GetAllRoutes(c *fiber.Ctx) error {
-	schoolUUID, ok := c.Locals("schoolUUID").(string)
-    if !ok {
-        return utils.BadRequestResponse(c, "Invalid token or schoolUUID", nil)
-    }
-	log.Println("Starting GetAllRoutes handler")
-
-	// Memanggil service untuk mendapatkan semua routes
-	routes, err := handler.routeService.GetAllRoutes(schoolUUID)
+	routes, err := handler.routeService.GetAllRoutesByAS(schoolUUID)
 	if err != nil {
-		log.Printf("Failed to get routes: %v", err)
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"error": "Failed to fetch routes",
 		})
 	}
 
-	// Mengembalikan response dengan data routes
 	return c.Status(fiber.StatusOK).JSON(fiber.Map{
 		"routes": routes,
 	})
 }
 
-// func (handler *routeHandler) GetSpecRoute(c *fiber.Ctx) error {
-// 	log.Println("Starting GetSpec handler")
+func (handler *routeHandler) GetSpecRouteByAS(c *fiber.Ctx) error {
+	routeNameUUID := c.Params("id")
 
-// 	// Ambil route_uuid dari URL
-// 	routeUUID := c.Params("id")
-// 	log.Printf("Extracted route_uuid from URL: %s", routeUUID)
+	driverUUID, err := handler.routeService.GetDriverUUIDByRouteName(routeNameUUID)
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": "Failed to get driver UUID",
+		})
+	}
 
-// 	// Validasi UUID
-// 	if _, err := uuid.Parse(routeUUID); err != nil {
-// 		log.Printf("Invalid route UUID: %s", routeUUID)
-// 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-// 			"error": "Invalid route UUID",
-// 		})
-// 	}
+	routeResponse, err := handler.routeService.GetSpecRouteByAS(routeNameUUID, driverUUID)
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": err.Error(),
+		})
+	}
 
-// 	// Mengambil username dari context (misalnya dari token)
-// 	username, ok := c.Locals("user_name").(string)
-// 	if !ok {
-// 		log.Println("Token does not contain username")
-// 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-// 			"error": "Token does not contain username",
-// 		})
-// 	}
-// 	log.Printf("Username: %s", username)
-
-// 	// Panggil service untuk mendapatkan detail route
-// 	route, err := handler.routeService.GetSpecRoute(routeUUID)
-// 	if err != nil {
-// 		log.Printf("Failed to get route by UUID: %v", err)
-// 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-// 			"error": err.Error(),
-// 		})
-// 	}
-
-// 	// Return response
-// 	return c.Status(fiber.StatusOK).JSON(fiber.Map{
-// 		"route": route,
-// 	})
-// }
+	return c.Status(fiber.StatusOK).JSON(routeResponse)
+}
 
 func (handler *routeHandler) GetAllRoutesByDriver(c *fiber.Ctx) error {
-	// Ambil driverUUID dari context (dari token)
 	driverUUID, ok := c.Locals("userUUID").(string)
 	if !ok {
-		log.Println("Token does not contain driver UUID")
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"error": "Token does not contain driver UUID",
 		})
 	}
 
-	// Validasi format UUID
 	_, err := uuid.Parse(driverUUID)
 	if err != nil {
-		log.Printf("Invalid UUID format: %v", err)
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
 			"error": "Invalid UUID format",
 		})
 	}
 
-	// Panggil service untuk mendapatkan routes berdasarkan driver UUID
 	routes, err := handler.routeService.GetAllRoutesByDriver(driverUUID)
 	if err != nil {
-		log.Printf("Failed to get routes by driver UUID: %v", err)
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"error": "Failed to fetch routes",
 		})
 	}
 
-	// Mengembalikan response dengan data routes
 	return c.Status(fiber.StatusOK).JSON(fiber.Map{
 		"routes": routes,
 	})
 }
 
 func (handler *routeHandler) GetSpecRouteByDriver(c *fiber.Ctx) error {
-	// Ambil driverUUID dari token
 	driverUUID, ok := c.Locals("userUUID").(string)
 	if !ok || driverUUID == "" {
-		log.Println("Token does not contain driver UUID")
 		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
 			"error": "Invalid token",
 		})
 	}
 
-	// Ambil studentUUID dari URL parameter
 	studentUUID := c.Params("id")
 	if studentUUID == "" {
-		log.Println("Student UUID is required")
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
 			"error": "Student UUID is required",
 		})
 	}
 
-	// Panggil service untuk mendapatkan data spesifik route
 	route, err := handler.routeService.GetSpecRouteByDriver(driverUUID, studentUUID)
 	if err != nil {
-		log.Printf("Failed to get specific route: %v", err)
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"error": "Failed to fetch specific route",
 		})
 	}
 
-	// Mengembalikan response dengan data spesifik route
 	return c.Status(fiber.StatusOK).JSON(fiber.Map{
 		"route": route,
 	})
 }
 
 func (handler *routeHandler) AddRoute(c *fiber.Ctx) error {
-	log.Println("Starting AddRoute handler")
-
-	// Ambil schoolUUID dan username dari token
 	schoolUUID, ok := c.Locals("schoolUUID").(string)
 	if !ok {
-		log.Println("Token does not contain schoolUUID")
 		return utils.InternalServerErrorResponse(c, "Token does not contain schoolUUID", nil)
 	}
 
 	username, ok := c.Locals("user_name").(string)
 	if !ok {
-		log.Println("Token does not contain username")
 		return utils.InternalServerErrorResponse(c, "Token does not contain username", nil)
 	}
 
-	// Parsing body ke DTO
 	route := new(dto.RoutesRequestDTO)
 	if err := c.BodyParser(route); err != nil {
-		log.Printf("Error parsing body: %v", err)
 		return utils.BadRequestResponse(c, "Invalid request body", nil)
 	}
 
-	// Validasi input
 	if err := utils.ValidateStruct(c, route); err != nil {
 		return utils.BadRequestResponse(c, err.Error(), nil)
 	}
 
-	// Panggil service
 	err := handler.routeService.AddRoute(*route, schoolUUID, username)
 	if err != nil {
+		if err.Error() == "student not found" {
+			return utils.BadRequestResponse(c, "Student not found", nil)
+		}
+		if err.Error() == "driver not found" {
+			return utils.BadRequestResponse(c, "Driver not found", nil)
+		}
+		if err.Error() == "driver already assigned to another route" {
+			return utils.BadRequestResponse(c, "Driver already assigned to another route", nil)
+		}
 		return utils.InternalServerErrorResponse(c, err.Error(), nil)
 	}
 
 	return utils.SuccessResponse(c, "Route added successfully", nil)
 }
 
-// func (handler *routeHandler) UpdateRoute(c *fiber.Ctx) error {
-// 	log.Println("Starting UpdateRoute handler")
+func (handler *routeHandler) UpdateRoute(c *fiber.Ctx) error {
+	routenameUUID := c.Params("id")
 
-// 	// Ambil route_uuid dari URL
-// 	routeUUID := c.Params("id")
-// 	log.Printf("Extracted route_uuid from URL: %s", routeUUID)
-
-// 	// Validasi UUID
-// 	if _, err := uuid.Parse(routeUUID); err != nil {
-// 		log.Printf("Invalid route UUID: %s", routeUUID)
-// 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-// 			"error": "Invalid route UUID",
-// 		})
-// 	}
-// 	log.Println("Route UUID validation passed")
-
-// 	// Ambil data dari request body
-// 	var updateDTO dto.RouteRequestDTO
-// 	if err := c.BodyParser(&updateDTO); err != nil {
-// 		log.Println("Failed to parse request body")
-// 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-// 			"error": "Failed to parse request body",
-// 		})
-// 	}
-// 	log.Printf("Parsed request body: %+v", updateDTO)
-
-// 	// Ambil username dari context (misalnya dari JWT)
-// 	username, ok := c.Locals("user_name").(string)
-// 	if !ok || username == "" {
-// 		log.Println("Failed to retrieve username from context")
-// 		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
-// 			"error": "Unauthorized",
-// 		})
-// 	}
-// 	log.Printf("Retrieved username from context: %s", username)
-
-// 	// Panggil service untuk update
-// 	log.Println("Calling routeService.UpdateRoute")
-// 	if err := handler.routeService.UpdateRoute(routeUUID, updateDTO, username); err != nil {
-// 		log.Printf("Failed to update route: %v", err)
-// 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-// 			"error": err.Error(),
-// 		})
-// 	}
-// 	log.Println("Route updated successfully")
-
-// 	// Response success
-// 	log.Println("Returning success response")
-// 	return c.Status(fiber.StatusOK).JSON(fiber.Map{
-// 		"message": "Route updated successfully",
-// 	})
-// }
-
-func (handler *routeHandler) DeleteRoute(c *fiber.Ctx) error {
-	log.Println("Starting DeleteRoute handler")
-
-	// Ambil route_uuid dari URL
-	routeUUID := c.Params("id")
-	log.Printf("Extracted route_uuid from URL: %s", routeUUID)
-
-	// Validasi UUID
-	if _, err := uuid.Parse(routeUUID); err != nil {
-		log.Printf("Invalid route UUID: %s", routeUUID)
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error": "Invalid route UUID",
-		})
+	schoolUUID, ok := c.Locals("schoolUUID").(string)
+	if !ok {
+		return utils.InternalServerErrorResponse(c, "Token does not contain schoolUUID", nil)
 	}
 
-	// Mengambil username dari context (misalnya dari token)
 	username, ok := c.Locals("user_name").(string)
 	if !ok {
-		log.Println("Token does not contain username")
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": "Token does not contain username",
-		})
-	}
-	log.Printf("Username: %s", username)
-
-	// Panggil service untuk delete route
-	if err := handler.routeService.DeleteRoute(routeUUID, username); err != nil {
-		log.Printf("Failed to delete route: %v", err)
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": err.Error(),
-		})
+		return utils.InternalServerErrorResponse(c, "Token does not contain username", nil)
 	}
 
-	// Return success response
-	return c.Status(fiber.StatusOK).JSON(fiber.Map{
-		"message": "Route deleted successfully",
-	})
+	route := new(dto.RoutesRequestDTO)
+	if err := c.BodyParser(route); err != nil {
+		return utils.BadRequestResponse(c, "Invalid request body", nil)
+	}
+
+	if err := utils.ValidateStruct(c, route); err != nil {
+		return utils.BadRequestResponse(c, err.Error(), nil)
+	}
+
+	err := handler.routeService.UpdateRoute(*route, routenameUUID, schoolUUID, username)
+	if err != nil {
+		return utils.InternalServerErrorResponse(c, err.Error(), nil)
+	}
+
+	return utils.SuccessResponse(c, "Route updated successfully", nil)
+}
+
+func (handler *routeHandler) DeleteRoute(c *fiber.Ctx) error {
+	routenameUUID := c.Params("id")
+
+	schoolUUID, ok := c.Locals("schoolUUID").(string)
+	if !ok {
+		return utils.InternalServerErrorResponse(c, "Token does not contain schoolUUID", nil)
+	}
+
+	username, ok := c.Locals("user_name").(string)
+	if !ok {
+		return utils.InternalServerErrorResponse(c, "Token does not contain username", nil)
+	}
+
+	err := handler.routeService.DeleteRoute(routenameUUID, schoolUUID, username)
+	if err != nil {
+		if err.Error() == "route not found" {
+			return utils.NotFoundResponse(c, "Route not found", nil)
+		}
+		return utils.InternalServerErrorResponse(c, err.Error(), nil)
+	}
+
+	return utils.SuccessResponse(c, "Route deleted successfully", nil)
 }

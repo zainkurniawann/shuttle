@@ -1,37 +1,33 @@
 package repositories
 
 import (
-	// "database/sql"
-	// "encoding/json"
-	// "errors"
-	// "time"
 	"database/sql"
 	"fmt"
-	"log"
-
-	// "shuttle/models/dto"
+	"time"
 	"shuttle/models/dto"
 	"shuttle/models/entity"
-
-	// "shuttle/repositories"
-
-	// "github.com/google/uuid"
+	"github.com/google/uuid"
 	"github.com/jmoiron/sqlx"
-	// "github.com/google/uuid"
 )
 
 type RouteRepositoryInterface interface {
-	FetchAllRoutes(schoolUUID string) ([]dto.RoutesResponseDTO, error)
-	FetchSpecRoute(driverUUID, schoolUUID string) ([]entity.RouteAssignment, error)
+	FetchAllRoutesByAS(schoolUUID string) ([]dto.RoutesResponseDTO, error)
+	FetchSpecRouteByAS(route_name_UUID, driverUUID string) ([]entity.RouteAssignment, error)
 	FetchAllRoutesByDriver(driverUUID string) ([]dto.RouteResponseByDriverDTO, error)
 	FetchSpecRouteByDriver(driverUUID, studentUUID string) (*dto.RouteResponseByDriverDTO, error)
-	GetRouteByStudentAndSchool(studentUUID, schoolUUID string) (*entity.RouteAssignment, error)
+	AddRoutes(tx *sql.Tx, route entity.Routes) (string, error)
+	AddRouteAssignment(tx *sql.Tx, assignment entity.RouteAssignment) error
+	IsStudentAssigned(tx *sql.Tx, studentUUID string) (bool, error)
+	IsDriverAssigned(tx *sql.Tx, driverUUID string) (bool, error)
+	BeginTransaction() (*sql.Tx, error)
+	UpdateRoute(tx *sql.Tx, route entity.Routes) error
+	UpdateRouteAssignment(tx *sql.Tx, assignment entity.RouteAssignment) error
+	DeleteRoute(tx *sql.Tx, routenameUUID, schoolUUID string) error
+	DeleteRouteAssignments(tx *sql.Tx, routenameUUID, schoolUUID string) error
 	ValidateDriverVehicle(driverUUID string) (bool, error)
-	AddRoute(route entity.Routes) error
 	GetSchoolUUIDByUserUUID(userUUID string, schoolUUID *string) error
-	UpdateRoute(routeUUID string, route entity.RouteAssignment) error
-	DeleteRoute(routeUUID string, username string) error
-	// GetRouteByID(routeID int64) (*entity.RouteAssignment, error)
+	GetDriverUUIDByRouteName(routeNameUUID string) (string, error)
+	RouteExists(tx *sql.Tx, routenameUUID, schoolUUID string) (bool, error)
 }
 
 type routeRepository struct {
@@ -44,7 +40,11 @@ func NewRouteRepository(DB *sqlx.DB) *routeRepository {
 	}
 }
 
-func (r *routeRepository) FetchAllRoutes(schoolUUID string) ([]dto.RoutesResponseDTO, error) {
+func (r *routeRepository) BeginTransaction() (*sql.Tx, error) {
+	return r.DB.Begin()
+}
+
+func (r *routeRepository) FetchAllRoutesByAS(schoolUUID string) ([]dto.RoutesResponseDTO, error) {
 	query := `
 	SELECT 
 		route_name_uuid, 
@@ -84,7 +84,6 @@ func (r *routeRepository) FetchAllRoutes(schoolUUID string) ([]dto.RoutesRespons
 			return nil, err
 		}
 
-		// Menangani nilai null
 		if createdAt.Valid {
 			route.CreatedAt = createdAt.Time.Format("2006-01-02 15:04:05")
 		}
@@ -108,40 +107,63 @@ func (r *routeRepository) FetchAllRoutes(schoolUUID string) ([]dto.RoutesRespons
 	return routes, nil
 }
 
-func (repository *routeRepository) FetchSpecRoute(driverUUID, schoolUUID string) ([]entity.RouteAssignment, error) {
-    log.Println("Starting FetchRoutesByDriverAndSchool repository")
+func (r *routeRepository) FetchSpecRouteByAS(routeNameUUID, driverUUID string) ([]entity.RouteAssignment, error) {
+	var driverUUIDParam interface{}
+	if driverUUID == "" {
+		driverUUIDParam = uuid.Nil
+	} else {
+		driverUUIDParam = driverUUID
+	}
 
-    query := `
-		SELECT 
-			ra.driver_uuid,
-			ra.student_uuid,
-			r.route_name,
-			r.route_description
-		FROM route_assignment ra
-		LEFT JOIN routes r 
-			ON ra.route_name_uuid = r.route_name_uuid
-		WHERE ra.driver_uuid = $1
-		AND ra.school_uuid = $2
+	query := `
+        SELECT 
+            r.route_name_uuid,
+            r.route_name,
+            r.route_description,
+            ra.driver_uuid,
+            COALESCE(d.user_first_name, '') AS driver_first_name,
+            COALESCE(d.user_last_name, '') AS driver_last_name,
+            s.student_uuid,
+            COALESCE(s.student_first_name, '') AS student_first_name,
+            COALESCE(s.student_last_name, '') AS student_last_name,
+            COALESCE(ra.student_order, 0) AS student_order
+        FROM routes r
+        LEFT JOIN route_assignment ra ON r.route_name_uuid = ra.route_name_uuid
+        LEFT JOIN driver_details d ON ra.driver_uuid = d.user_uuid
+        LEFT JOIN students s ON ra.student_uuid = s.student_uuid
+        WHERE r.route_name_uuid = $1
+        AND (ra.driver_uuid = $2 OR ra.driver_uuid IS NULL)
+        ORDER BY ra.student_order desc
     `
 
-    rows, err := repository.DB.Query(query, driverUUID, schoolUUID)
-    if err != nil {
-        log.Printf("Error querying routes: %v", err)
-        return nil, fmt.Errorf("failed to fetch routes: %w", err)
-    }
-    defer rows.Close()
+	rows, err := r.DB.Query(query, routeNameUUID, driverUUIDParam)
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch routes: %w", err)
+	}
+	defer rows.Close()
 
-    var routes []entity.RouteAssignment
-    for rows.Next() {
-        var route entity.RouteAssignment
-        if err := rows.Scan(&route.DriverUUID, &route.StudentUUID, &route.RouteName, &route.RouteDescription); err != nil {
-            log.Printf("Error scanning route data: %v", err)
-            return nil, fmt.Errorf("failed to scan route data: %w", err)
-        }
-        routes = append(routes, route)
-    }
+	var routes []entity.RouteAssignment
+	for rows.Next() {
+		var route entity.RouteAssignment
+		if err := rows.Scan(
+			&route.RouteNameUUID,
+			&route.RouteName,
+			&route.RouteDescription,
+			&route.DriverUUID,
+			&route.DriverFirstName,
+			&route.DriverLastName,
+			&route.StudentUUID,
+			&route.StudentFirstName,
+			&route.StudentLastName,
+			&route.StudentOrder,
+		); err != nil {
+			return nil, fmt.Errorf("failed to scan route data: %w", err)
+		}
 
-    return routes, nil
+		routes = append(routes, route)
+	}
+
+	return routes, nil
 }
 
 func (repo *routeRepository) FetchAllRoutesByDriver(driverUUID string) ([]dto.RouteResponseByDriverDTO, error) {
@@ -165,11 +187,10 @@ func (repo *routeRepository) FetchAllRoutesByDriver(driverUUID string) ([]dto.Ro
 		LEFT JOIN shuttle st ON r.student_uuid = st.student_uuid AND DATE(st.created_at) = CURRENT_DATE
 		WHERE r.driver_uuid = $1
 		ORDER BY r.created_at ASC
-		`
+	`
 	var routes []dto.RouteResponseByDriverDTO
 	err := repo.DB.Select(&routes, query, driverUUID)
 	if err != nil {
-		log.Printf("Error executing query: %v", err)
 		return nil, err
 	}
 	return routes, nil
@@ -188,7 +209,7 @@ func (repo *routeRepository) FetchSpecRouteByDriver(driverUUID, studentUUID stri
 			s.student_pickup_point,
 			sc.school_name,
 			sc.school_point
-		FROM route_jawa r
+		FROM route_assignment r
 		LEFT JOIN students s ON r.student_uuid = s.student_uuid
 		LEFT JOIN schools sc ON r.school_uuid = sc.school_uuid
 		WHERE r.driver_uuid = $1 AND r.student_uuid = $2
@@ -196,33 +217,8 @@ func (repo *routeRepository) FetchSpecRouteByDriver(driverUUID, studentUUID stri
 	var route dto.RouteResponseByDriverDTO
 	err := repo.DB.Get(&route, query, driverUUID, studentUUID)
 	if err != nil {
-		log.Printf("Error executing query: %v", err)
 		return nil, err
 	}
-	return &route, nil
-}
-
-func (r *routeRepository) GetRouteByStudentAndSchool(studentUUID, schoolUUID string) (*entity.RouteAssignment, error) {
-	query := `
-		SELECT route_id, route_uuid, driver_uuid, student_uuid, school_uuid, route_name, route_description, created_at, created_by
-		FROM route_jawa
-		WHERE student_uuid = $1 AND school_uuid = $2
-		LIMIT 1
-	`
-
-	var route entity.RouteAssignment
-	err := r.DB.QueryRow(query, studentUUID, schoolUUID).Scan(
-		&route.RouteID, &route.RouteUUID, &route.DriverUUID, &route.StudentUUID, &route.SchoolUUID,
-		&route.RouteName, &route.RouteDescription, &route.CreatedAt, &route.CreatedBy,
-	)
-
-	if err != nil {
-		if err == sql.ErrNoRows {
-			return nil, nil // Tidak ditemukan, berarti route tidak ada
-		}
-		return nil, fmt.Errorf("failed to query database: %w", err)
-	}
-
 	return &route, nil
 }
 
@@ -243,40 +239,120 @@ func (r *routeRepository) ValidateDriverVehicle(driverUUID string) (bool, error)
 		return false, fmt.Errorf("failed to query driver details with vehicle join: %w", err)
 	}
 
-	// Pastikan vehicle_uuid dan driver_uuid tidak null
 	if !vehicleUUID.Valid || !driverUUIDFromVehicle.Valid {
 		return false, nil
 	}
 
-	// Jika kedua kolom valid (tidak kosong), kembalikan true
 	return true, nil
 }
 
-func (r *routeRepository) AddRoute(route entity.Routes) error {
+func (r *routeRepository) AddRoutes(tx *sql.Tx, route entity.Routes) (string, error) {
+	var routeNameUUID string
 	query := `
-		INSERT INTO routes (
-			route_id, route_name_uuid, school_uuid, 
-			route_name, route_description, created_at, created_by
-		) VALUES ($1, $2, $3, $4, $5, $6, $7)
-	`
+        INSERT INTO routes (
+            route_id,
+            route_name_uuid,
+            school_uuid,
+            route_name,
+            route_description,
+            created_at,
+            created_by
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7)
+        RETURNING route_name_uuid
+    `
 
-	_, err := r.DB.Exec(query,
+	err := tx.QueryRow(query,
 		route.RouteID,
-		route.RouteNameUUID.String(),
-		route.SchoolUUID.String(),
+		route.RouteNameUUID,
+		route.SchoolUUID,
 		route.RouteName,
 		route.RouteDescription,
 		route.CreatedAt.Time,
 		route.CreatedBy.String,
-	)
+	).Scan(&routeNameUUID)
 	if err != nil {
-		return fmt.Errorf("failed to execute query: %w", err)
+		return "", fmt.Errorf("failed to insert route: %w", err)
+	}
+	return routeNameUUID, nil
+}
+
+func (r *routeRepository) AddRouteAssignment(tx *sql.Tx, assignment entity.RouteAssignment) error {
+	var driverCount int
+	err := tx.QueryRow("SELECT COUNT(*) FROM users WHERE user_uuid = $1", assignment.DriverUUID).Scan(&driverCount)
+	if err != nil {
+		return fmt.Errorf("error checking driver UUID: %w", err)
+	}
+	if driverCount == 0 {
+		return fmt.Errorf("driver not found")
 	}
 
+	var studentCount int
+	err = tx.QueryRow("SELECT COUNT(*) FROM students WHERE student_uuid = $1", assignment.StudentUUID).Scan(&studentCount)
+	if err != nil {
+		return fmt.Errorf("error checking student UUID: %w", err)
+	}
+	if studentCount == 0 {
+		return fmt.Errorf("student not found")
+	}
+
+	query := `
+        INSERT INTO route_assignment (
+            route_id,
+            route_uuid,
+            driver_uuid,
+            student_uuid,
+            student_order,
+            school_uuid,
+            route_name_uuid,
+            created_at,
+            created_by
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+    `
+	_, err = tx.Exec(query,
+		assignment.RouteID,
+		assignment.RouteUUID,
+		assignment.DriverUUID,
+		assignment.StudentUUID,
+		assignment.StudentOrder,
+		assignment.SchoolUUID,
+		assignment.RouteNameUUID,
+		time.Now(),
+		assignment.CreatedBy.String,
+	)
+	if err != nil {
+		return fmt.Errorf("failed to insert route assignment: %w", err)
+	}
 	return nil
 }
 
-// Fungsi di userService untuk mengambil schoolUUID berdasarkan userUUID
+func (r *routeRepository) IsDriverAssigned(tx *sql.Tx, driverUUID string) (bool, error) {
+	var count int
+	query := `
+        SELECT COUNT(*) 
+        FROM route_assignment 
+        WHERE driver_uuid = $1 AND deleted_at IS NULL
+    `
+	err := tx.QueryRow(query, driverUUID).Scan(&count)
+	if err != nil {
+		return false, fmt.Errorf("error checking driver assignment: %w", err)
+	}
+	return count > 0, nil
+}
+
+func (r *routeRepository) IsStudentAssigned(tx *sql.Tx, studentUUID string) (bool, error) {
+	var count int
+	query := `
+        SELECT COUNT(*) 
+        FROM route_assignment 
+        WHERE student_uuid = $1 AND deleted_at IS NULL
+    `
+	err := tx.QueryRow(query, studentUUID).Scan(&count)
+	if err != nil {
+		return false, fmt.Errorf("error checking student assignment: %w", err)
+	}
+	return count > 0, nil
+}
+
 func (r *routeRepository) GetSchoolUUIDByUserUUID(userUUID string, schoolUUID *string) error {
 	query := `
 		SELECT school_uuid
@@ -290,77 +366,103 @@ func (r *routeRepository) GetSchoolUUIDByUserUUID(userUUID string, schoolUUID *s
 	return nil
 }
 
-func (r *routeRepository) UpdateRoute(routeUUID string, route entity.RouteAssignment) error {
+func (r *routeRepository) GetDriverUUIDByRouteName(routeNameUUID string) (string, error) {
+	var driverUUID *string
 	query := `
-		UPDATE route_jawa
-		SET 
-			driver_uuid = $1,
-			student_uuid = $2,
-			school_uuid = $3,
-			route_name = $4,
-			route_description = $5,
-			updated_at = $6,
-			updated_by = $7
-		WHERE 
-			route_uuid = $8
+		SELECT 
+			ra.driver_uuid
+		FROM routes r
+		LEFT JOIN route_assignment ra ON r.route_name_uuid = ra.route_name_uuid
+		WHERE r.route_name_uuid = $1
+	`
+	err := r.DB.QueryRow(query, routeNameUUID).Scan(&driverUUID)
+
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return "", nil
+		}
+		return "", fmt.Errorf("failed to get driver UUID: %w", err)
+	}
+	if driverUUID == nil {
+		return "", nil
+	}
+	return *driverUUID, nil
+}
+
+func (r *routeRepository) UpdateRoute(tx *sql.Tx, route entity.Routes) error {
+	query := `
+		UPDATE routes
+		SET route_name = $1,
+		    route_description = $2,
+		    updated_at = $3,
+		    updated_by = $4
+		WHERE route_name_uuid = $5
 	`
 
-	_, err := r.DB.Exec(query,
-		route.DriverUUID.String(),
-		route.StudentUUID.String(),
-		route.SchoolUUID.String(),
+	_, err := tx.Exec(query,
 		route.RouteName,
 		route.RouteDescription,
 		route.UpdatedAt.Time,
 		route.UpdatedBy.String,
-		routeUUID,
+		route.RouteNameUUID,
 	)
 	if err != nil {
-		return fmt.Errorf("failed to execute update query: %w", err)
+		return fmt.Errorf("failed to update route: %w", err)
 	}
-
 	return nil
 }
 
-func (repo *routeRepository) DeleteRoute(routeUUID string, username string) error {
-	// Query untuk menghapus route berdasarkan UUID
-	query := `DELETE FROM route_jawa WHERE route_uuid = $1`
-	_, err := repo.DB.Exec(query, routeUUID)
+func (r *routeRepository) UpdateRouteAssignment(tx *sql.Tx, assignment entity.RouteAssignment) error {
+	query := `
+		UPDATE route_assignment
+		SET driver_uuid = $1,
+		    student_uuid = $2,
+		    student_order = $3,
+		    updated_at = $4,
+		    updated_by = $5
+		WHERE route_uuid = $6 AND driver_uuid = $7 AND student_uuid = $8
+	`
+
+	_, err := tx.Exec(query,
+		assignment.DriverUUID,
+		assignment.StudentUUID,
+		assignment.StudentOrder,
+		time.Now(),
+		assignment.CreatedBy.String,
+		assignment.RouteUUID,
+		assignment.DriverUUID,
+		assignment.StudentUUID,
+	)
 	if err != nil {
-		return fmt.Errorf("failed to execute delete query: %w", err)
+		return fmt.Errorf("failed to update route assignment: %w", err)
 	}
-
-	// Log penghapusan oleh username
-	log.Printf("Route deleted by: %s", username)
 	return nil
 }
 
-// func (r *RouteRepository) GetRouteByID(routeID int64) (*entity.RouteAssignment, error) {
-// 	query := `
-// 		SELECT route_id, route_uuid, school_uuid, route_name, route_description,
-// 		       route_status, route_points, created_at, created_by, updated_at, updated_by, deleted_at, deleted_by
-// 		FROM routes WHERE route_id = ?
-// 	`
+func (r *routeRepository) DeleteRoute(tx *sql.Tx, routenameUUID, schoolUUID string) error {
+	query := `DELETE FROM routes WHERE route_name_uuid = $1 AND school_uuid = $2`
+	_, err := tx.Exec(query, routenameUUID, schoolUUID)
+	if err != nil {
+		return fmt.Errorf("error deleting route: %w", err)
+	}
+	return nil
+}
 
-// 	row := r.db.QueryRow(query, routeID)
+func (r *routeRepository) DeleteRouteAssignments(tx *sql.Tx, routenameUUID, schoolUUID string) error {
+	query := `DELETE FROM route_assignment WHERE route_name_uuid = $1 AND school_uuid = $2`
+	_, err := tx.Exec(query, routenameUUID, schoolUUID)
+	if err != nil {
+		return fmt.Errorf("error deleting route assignments: %w", err)
+	}
+	return nil
+}
 
-// 	route := new(entity.RouteAssignment)
-// 	var routePointsJSON []byte
-// 	if err := row.Scan(
-// 		&route.RouteID, &route.RouteUUID, &route.SchoolUUID, &route.RouteName, &route.RouteDescription,
-// 		&route.RouteStatus, &routePointsJSON, &route.CreatedAt, &route.CreatedBy, &route.UpdatedAt, &route.UpdatedBy,
-// 		&route.DeletedAt, &route.DeletedBy,
-// 	); err != nil {
-// 		if err == sql.ErrNoRows {
-// 			return nil, errors.New("route not found")
-// 		}
-// 		return nil, err
-// 	}
-
-// 	// Deserialize RoutePoints dari JSON
-// 	if err := json.Unmarshal(routePointsJSON, &route.RoutePoints); err != nil {
-// 		return nil, err
-// 	}
-
-// 	return route, nil
-// }
+func (r *routeRepository) RouteExists(tx *sql.Tx, routenameUUID, schoolUUID string) (bool, error) {
+	var count int
+	query := `SELECT COUNT(*) FROM routes WHERE route_name_uuid = $1 AND school_uuid = $2`
+	err := tx.QueryRow(query, routenameUUID, schoolUUID).Scan(&count)
+	if err != nil {
+		return false, fmt.Errorf("error checking route existence: %w", err)
+	}
+	return count > 0, nil
+}

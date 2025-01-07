@@ -3,27 +3,23 @@ package services
 import (
 	"database/sql"
 	"fmt"
-	"log"
-
-	// "shuttle/errors"
 	"shuttle/models/dto"
 	"shuttle/models/entity"
 	"shuttle/repositories"
-	// "shuttle/services"
 	"time"
-
 	"github.com/google/uuid"
 )
 
 type RouteServiceInterface interface {
-	GetAllRoutes(schoolUUID string) ([]dto.RoutesResponseDTO, error)
-	GetSpecRoute(driverUUID, schoolUUID string) ([]dto.RouteAssignmentResponseDTO, error)
+	GetAllRoutesByAS(schoolUUID string) ([]dto.RoutesResponseDTO, error)
+	GetSpecRouteByAS(routeNameUUID, driverUUID string) (dto.RoutesResponseDTO, error)
 	GetAllRoutesByDriver(driverUUID string) ([]dto.RouteResponseByDriverDTO, error)
 	GetSpecRouteByDriver(driverUUID, studentUUID string) (*dto.RouteResponseByDriverDTO, error)
 	AddRoute(route dto.RoutesRequestDTO, schoolUUID, username string) error
 	GetSchoolUUIDByUserUUID(userUUID string) (string, error)
-	// UpdateRoute(routeUUID string, route dto.RouteRequestDTO, username string) error
-	DeleteRoute(routeUUID string, username string) error
+	GetDriverUUIDByRouteName(routeNameUUID string) (string, error)
+	UpdateRoute(route dto.RoutesRequestDTO, routenameUUID, schoolUUID, username string) error 
+	DeleteRoute(routenameUUID, schoolUUID, username string) error
 }
 
 type routeService struct {
@@ -36,92 +32,66 @@ func NewRouteService(routeRepository repositories.RouteRepositoryInterface) Rout
 	}
 }
 
-func (service *routeService) GetAllRoutes(schoolUUID string) ([]dto.RoutesResponseDTO, error) {
-	log.Println("Starting GetAllRoutes service")
-
-	routes, err := service.routeRepository.FetchAllRoutes(schoolUUID)
+func (service *routeService) GetAllRoutesByAS(schoolUUID string) ([]dto.RoutesResponseDTO, error) {
+	routes, err := service.routeRepository.FetchAllRoutesByAS(schoolUUID)
 	if err != nil {
-		log.Printf("Failed to get routes: %v", err)
 		return nil, fmt.Errorf("failed to get routes: %w", err)
 	}
-
-	log.Println("Routes fetched successfully")
 	return routes, nil
 }
 
+func (s *routeService) GetSpecRouteByAS(routeNameUUID, driverUUID string) (dto.RoutesResponseDTO, error) {
+	if driverUUID == "" {
+		driverUUID = ""
+	}
 
-func (service *routeService) GetSpecRoute(driverUUID, schoolUUID string) ([]dto.RouteAssignmentResponseDTO, error) {
-    log.Println("Starting GetRoutesByDriverAndSchool service")
+	routes, err := s.routeRepository.FetchSpecRouteByAS(routeNameUUID, driverUUID)
+	if err != nil {
+		return dto.RoutesResponseDTO{}, err
+	}
 
-    routes, err := service.routeRepository.FetchSpecRoute(driverUUID, schoolUUID)
-    if err != nil {
-        return nil, err
-    }
+	var routeResponse dto.RoutesResponseDTO
+	if len(routes) == 0 {
+		routeResponse.RouteName = "Route not assigned"
+		routeResponse.RouteDescription = "No description available"
+		routeResponse.RouteAssignment = nil
+		return routeResponse, nil
+	}
 
-    driverMap := make(map[string][]dto.RouteAssignmentDTO)
-    for _, route := range routes {
-        student := dto.RouteAssignmentDTO{
-            StudentUUID:      route.StudentUUID.String(),
-            RouteName:        route.RouteName,
-            RouteDescription: route.RouteDescription,
-        }
-        driverMap[route.DriverUUID.String()] = append(driverMap[route.DriverUUID.String()], student)
-    }
+	routeResponse.RouteNameUUID = routes[0].RouteNameUUID
+	routeResponse.RouteName = routes[0].RouteName
+	routeResponse.RouteDescription = routes[0].RouteDescription
 
-    var response []dto.RouteAssignmentResponseDTO
-    for driverUUID, students := range driverMap {
-        response = append(response, dto.RouteAssignmentResponseDTO{
-            DriverUUID: driverUUID,
-            Students:   students,
-        })
-    }
+	if routes[0].DriverUUID == uuid.Nil {
+		routeResponse.RouteAssignment = nil
+		return routeResponse, nil
+	}
+	driverInfo := dto.RouteAssignmentResponseDTO{
+		DriverUUID:      routes[0].DriverUUID.String(),
+		DriverFirstName: defaultString(routes[0].DriverFirstName),
+		DriverLastName:  defaultString(routes[0].DriverLastName),
+	}
 
-    return response, nil
+	for _, route := range routes {
+		student := dto.StudentDTO{
+			StudentUUID:      route.StudentUUID.String(),
+			StudentFirstName: defaultString(route.StudentFirstName),
+			StudentLastName:  defaultString(route.StudentLastName),
+			StudentOrder:     route.StudentOrder,
+		}
+		driverInfo.Students = append(driverInfo.Students, student)
+	}
+
+	routeResponse.RouteAssignment = append(routeResponse.RouteAssignment, driverInfo)
+	return routeResponse, nil
 }
 
-// func (service *routeService) GetSpecRoute(routeUUID string) (dto.RouteResponseDTO, error) {
-// 	log.Println("Starting GetRouteByUUID service")
-
-// 	// Memanggil repository untuk mendapatkan route berdasarkan UUID
-// 	route, err := service.routeRepository.FetchSpecRoute(routeUUID)
-// 	if err != nil {
-// 		log.Printf("Failed to get route from repository: %v", err)
-// 		return dto.RouteResponseDTO{}, fmt.Errorf("failed to get route: %w", err)
-// 	}
-
-// 	// Mengonversi waktu menjadi string dan mengatur nilai untuk UpdatedAt dan UpdatedBy
-// 	createdAt := route.CreatedAt.Time.Format("2006-01-02 15:04:05")
-
-// 	var updatedAt string
-// 	if route.UpdatedAt.Valid {
-// 		updatedAt = route.UpdatedAt.Time.Format("2006-01-02 15:04:05")
-// 	} else {
-// 		updatedAt = "N/A"
-// 	}
-
-// 	var updatedBy string
-// 	if route.UpdatedBy.Valid {
-// 		updatedBy = route.UpdatedBy.String
-// 	} else {
-// 		updatedBy = "N/A"
-// 	}
-
-// 	// Return RouteResponseDTO yang sudah di-mapping
-// 	return dto.RouteResponseDTO{
-// 		RouteUUID:        route.RouteUUID.String(),
-// 		DriverUUID:       route.DriverUUID.String(),
-// 		UserUsername:     route.UserUsername,
-// 		StudentUUID:      route.StudentUUID.String(),
-// 		StudentName:      route.StudentName,
-// 		SchoolUUID:       route.SchoolUUID.String(),
-// 		RouteName:        route.RouteName,
-// 		RouteDescription: route.RouteDescription,
-// 		CreatedAt:        createdAt,
-// 		CreatedBy:        route.CreatedBy.String,
-// 		UpdatedAt:        updatedAt,
-// 		UpdatedBy:        updatedBy,
-// 	}, nil
-// }
+func defaultString(str string) string {
+	if str == "" {
+		return "Unknown"
+	}
+	return str
+}
 
 func (service *routeService) GetAllRoutesByDriver(driverUUID string) ([]dto.RouteResponseByDriverDTO, error) {
 	routes, err := service.routeRepository.FetchAllRoutesByDriver(driverUUID)
@@ -140,22 +110,83 @@ func (service *routeService) GetSpecRouteByDriver(driverUUID, studentUUID string
 }
 
 func (service *routeService) AddRoute(route dto.RoutesRequestDTO, schoolUUID, username string) error {
-	log.Println("Starting AddRoute service")
-
-	// Mapping DTO ke Entity
 	routeEntity := entity.Routes{
-		RouteID:           time.Now().UnixNano(),
-		RouteNameUUID:     uuid.New(),
-		SchoolUUID:        uuid.MustParse(schoolUUID),
-		RouteName:         route.RouteName,
-		RouteDescription:  route.RouteDescription,
-		CreatedAt:         sql.NullTime{Time: time.Now(), Valid: true},
-		CreatedBy:         sql.NullString{String: username, Valid: true},
+		RouteID:          time.Now().UnixMilli()*1e6 + int64(uuid.New().ID()%1e6),
+		RouteNameUUID:    uuid.New(),
+		SchoolUUID:       uuid.MustParse(schoolUUID),
+		RouteName:        route.RouteName,
+		RouteDescription: route.RouteDescription,
+		CreatedAt:        sql.NullTime{Time: time.Now(), Valid: true},
+		CreatedBy:        sql.NullString{String: username, Valid: true},
 	}
 
-	// Menyimpan route ke database
-	if err := service.routeRepository.AddRoute(routeEntity); err != nil {
+tx, err := service.routeRepository.BeginTransaction()
+	if err != nil {
+		return fmt.Errorf("failed to start transaction: %w", err)
+	}
+defer func() {
+		if r := recover(); r != nil {
+			tx.Rollback()
+			panic(r)
+		}
+	}()
+
+routeNameUUID, err := service.routeRepository.AddRoutes(tx, routeEntity)
+	if err != nil {
+		tx.Rollback()
 		return fmt.Errorf("failed to add route: %w", err)
+	}
+
+parsedRouteUUID := uuid.MustParse(routeNameUUID)
+
+for _, assignment := range route.RouteAssignment {
+		isDriverAssigned, err := service.routeRepository.IsDriverAssigned(tx, assignment.DriverUUID.String())
+		if err != nil {
+			tx.Rollback()
+			return fmt.Errorf("error checking driver assignment: %w", err)
+		}
+		if isDriverAssigned {
+			tx.Rollback()
+			return fmt.Errorf("driver already assigned to another route")
+		}
+
+		for _, student := range assignment.Students {
+			isStudentAssigned, err := service.routeRepository.IsStudentAssigned(tx, student.StudentUUID.String())
+			if err != nil {
+				tx.Rollback()
+				return fmt.Errorf("error checking student assignment: %w", err)
+			}
+			if isStudentAssigned {
+				tx.Rollback()
+				return fmt.Errorf("student already assigned to another route")
+			}
+
+			if student.StudentOrder == "" || student.StudentOrder == "0" {
+				tx.Rollback()
+				return fmt.Errorf("Student order cannot be empty or zero")
+			}
+
+			routeAssignmentEntity := entity.RouteAssignment{
+				RouteID:       time.Now().UnixMilli()*1e6 + int64(uuid.New().ID()%1e6),
+				RouteUUID:     parsedRouteUUID,
+				DriverUUID:    assignment.DriverUUID,
+				StudentUUID:   student.StudentUUID,
+				StudentOrder:  student.StudentOrder,
+				SchoolUUID:    uuid.MustParse(schoolUUID),
+				RouteNameUUID: routeEntity.RouteNameUUID.String(),
+				CreatedAt:     sql.NullTime{Time: time.Now(), Valid: true},
+				CreatedBy:     sql.NullString{String: username, Valid: true},
+			}
+
+			if err := service.routeRepository.AddRouteAssignment(tx, routeAssignmentEntity); err != nil {
+				tx.Rollback()
+				return fmt.Errorf("failed to add route assignment: %w", err)
+			}
+		}
+	}
+
+if err := tx.Commit(); err != nil {
+		return fmt.Errorf("failed to commit transaction: %w", err)
 	}
 
 	return nil
@@ -163,7 +194,6 @@ func (service *routeService) AddRoute(route dto.RoutesRequestDTO, schoolUUID, us
 
 func (s *routeService) GetSchoolUUIDByUserUUID(userUUID string) (string, error) {
 	var schoolUUID string
-	// Memanggil repository untuk mendapatkan schoolUUID berdasarkan userUUID
 	err := s.routeRepository.GetSchoolUUIDByUserUUID(userUUID, &schoolUUID)
 	if err != nil {
 		return "", fmt.Errorf("error retrieving school UUID: %w", err)
@@ -171,49 +201,105 @@ func (s *routeService) GetSchoolUUIDByUserUUID(userUUID string) (string, error) 
 	return schoolUUID, nil
 }
 
-// func (service *routeService) UpdateRoute(routeUUID string, route dto.RouteRequestDTO, username string) error {
-// 	log.Println("Starting UpdateRoute service")
+func (s *routeService) GetDriverUUIDByRouteName(routeNameUUID string) (string, error) {
+	driverUUID, err := s.routeRepository.GetDriverUUIDByRouteName(routeNameUUID)
+	if err != nil {
+		return "", fmt.Errorf("error retrieving driver UUID: %w", err)
+	}
+	return driverUUID, nil
+}
 
-// 	// Validasi dan mapping DTO ke Entity
-// 	log.Println("Mapping DTO to Entity")
-// 	routeEntity := entity.Route{
-// 		DriverUUID:       uuid.MustParse(route.DriverUUID),
-// 		StudentUUID:      uuid.MustParse(route.StudentUUID),
-// 		SchoolUUID:       uuid.MustParse(route.SchoolUUID),
-// 		RouteName:        route.RouteName,
-// 		RouteDescription: route.RouteDescription,
-// 		UpdatedAt:        sql.NullTime{Time: time.Now(), Valid: true},
-// 		UpdatedBy:        sql.NullString{String: username, Valid: true}, // username dari context
-// 	}
-
-// 	// Log detail entity yang akan di-update
-// 	log.Printf("Route UUID to be updated: %s", routeUUID)
-// 	log.Printf("Route entity data to be updated: %+v", routeEntity)
-
-// 	// Panggil repository untuk melakukan update
-// 	log.Println("Calling repository to update route")
-// 	if err := service.routeRepository.UpdateRoute(routeUUID, routeEntity); err != nil {
-// 		log.Printf("Failed to update route: %v", err)
-// 		return fmt.Errorf("failed to update route: %w", err)
-// 	}
-
-// 	log.Println("Route updated successfully")
-// 	return nil
-// }
-
-func (service *routeService) DeleteRoute(routeUUID string, username string) error {
-	log.Println("Starting DeleteRoute service")
-
-	// Log informasi yang akan digunakan untuk delete
-	log.Printf("Route UUID to be deleted: %s", routeUUID)
-
-	// Panggil repository untuk delete route
-	log.Println("Calling repository to delete route")
-	if err := service.routeRepository.DeleteRoute(routeUUID, username); err != nil {
-		log.Printf("Failed to delete route: %v", err)
-		return fmt.Errorf("failed to delete route: %w", err)
+func (service *routeService) UpdateRoute(route dto.RoutesRequestDTO, routenameUUID, schoolUUID, username string) error {
+	routeEntity := entity.Routes{
+		RouteNameUUID:    uuid.MustParse(routenameUUID),
+		SchoolUUID:       uuid.MustParse(schoolUUID),
+		RouteName:        route.RouteName,
+		RouteDescription: route.RouteDescription,
+		UpdatedAt:        sql.NullTime{Time: time.Now(), Valid: true},
+		UpdatedBy:        sql.NullString{String: username, Valid: true},
 	}
 
-	log.Println("Route deleted successfully")
+	tx, err := service.routeRepository.BeginTransaction()
+	if err != nil {
+		return fmt.Errorf("failed to start transaction: %w", err)
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			tx.Rollback()
+			panic(r)
+		}
+	}()
+
+	err = service.routeRepository.UpdateRoute(tx, routeEntity)
+	if err != nil {
+		tx.Rollback()
+		return fmt.Errorf("failed to update route: %w", err)
+	}
+
+	for _, assignment := range route.RouteAssignment {
+		for _, student := range assignment.Students {
+			routeAssignmentEntity := entity.RouteAssignment{
+				RouteUUID:     uuid.MustParse(routenameUUID),
+				DriverUUID:    assignment.DriverUUID,
+				StudentUUID:   student.StudentUUID,
+				StudentOrder:  student.StudentOrder,
+				SchoolUUID:    uuid.MustParse(schoolUUID),
+				CreatedAt:     sql.NullTime{Time: time.Now(), Valid: true},
+				CreatedBy:     sql.NullString{String: username, Valid: true},
+			}
+
+			err := service.routeRepository.UpdateRouteAssignment(tx, routeAssignmentEntity)
+			if err != nil {
+				tx.Rollback()
+				return fmt.Errorf("failed to update route assignment: %w", err)
+			}
+		}
+	}
+
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("failed to commit transaction: %w", err)
+	}
+
+	return nil
+}
+
+func (service *routeService) DeleteRoute(routenameUUID, schoolUUID, username string) error {
+	tx, err := service.routeRepository.BeginTransaction()
+	if err != nil {
+		return fmt.Errorf("failed to start transaction: %w", err)
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			tx.Rollback()
+			panic(r)
+		}
+	}()
+
+	routeExists, err := service.routeRepository.RouteExists(tx, routenameUUID, schoolUUID)
+	if err != nil {
+		tx.Rollback()
+		return fmt.Errorf("error checking if route exists: %w", err)
+	}
+	if !routeExists {
+		tx.Rollback()
+		return fmt.Errorf("route not found")
+	}
+
+	err = service.routeRepository.DeleteRouteAssignments(tx, routenameUUID, schoolUUID)
+	if err != nil {
+		tx.Rollback()
+		return fmt.Errorf("error deleting route assignments: %w", err)
+	}
+
+	err = service.routeRepository.DeleteRoute(tx, routenameUUID, schoolUUID)
+	if err != nil {
+		tx.Rollback()
+		return fmt.Errorf("error deleting route: %w", err)
+	}
+
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("failed to commit transaction: %w", err)
+	}
+
 	return nil
 }
