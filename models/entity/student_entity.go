@@ -35,6 +35,7 @@ type Student struct {
 	StudentAddress   sql.NullString `db:"student_address"` // Menambahkan field student_address
 	StudentPickupPoint sql.NullString `db:"student_pickup_point"`
 	Gender     string         `db:"student_gender"`
+	Status 		string 	`db:"student_status"`
 	ParentID  sql.NullInt64  `db:"parent_id"`
 	ParentUUID sql.NullString `db:"parent_uuid"`
 	SchoolID  int64          `db:"school_id"`

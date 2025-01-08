@@ -46,7 +46,7 @@ func (repo *StudentRepository) FetchAllStudentsWithParents(offset int, limit int
 
 	query := fmt.Sprintf(`
 		SELECT s.student_uuid, s.parent_uuid, s.school_uuid, s.student_first_name, s.student_last_name, s.student_gender,
-			s.student_grade, s.created_at, u.user_uuid, pd.user_first_name, pd.user_last_name, pd.user_phone, pd.user_address
+			s.student_grade, s.student_status, s.created_at, u.user_uuid, pd.user_first_name, pd.user_last_name, pd.user_phone, pd.user_address
 		FROM students s
 		INNER JOIN users u ON s.parent_uuid = u.user_uuid
 		INNER JOIN parent_details pd ON s.parent_uuid = pd.user_uuid
@@ -66,7 +66,7 @@ func (repo *StudentRepository) FetchAllStudentsWithParents(offset int, limit int
 		var parent entity.ParentDetails
 
 		err := rows.Scan(&student.UUID, &student.ParentUUID, &student.SchoolUUID, &student.FirstName, &student.LastName,
-			&student.Gender, &student.Grade, &student.CreatedAt, &parent.UserUUID, &parent.FirstName,
+			&student.Gender, &student.Grade, &student.Status, &student.CreatedAt, &parent.UserUUID, &parent.FirstName,
 			&parent.LastName, &parent.Phone, &parent.Address)
 		if err != nil {
 			return nil, nil, err
@@ -85,7 +85,7 @@ func (repo *StudentRepository) FetchSpecStudentWithParents(studentUUID uuid.UUID
 
     query := `
     SELECT s.student_uuid, s.parent_uuid, s.school_uuid, s.student_first_name, s.student_last_name, s.student_gender,
-           s.student_grade, s.student_address, s.student_pickup_point, s.created_at, 
+           s.student_grade, s.student_status, s.student_address, s.student_pickup_point, s.created_at, 
            u.user_uuid, u.user_username, u.user_email, pd.user_first_name, pd.user_last_name, pd.user_phone, pd.user_address
     FROM students s
     INNER JOIN users u ON s.parent_uuid = u.user_uuid
@@ -93,7 +93,7 @@ func (repo *StudentRepository) FetchSpecStudentWithParents(studentUUID uuid.UUID
     WHERE s.student_uuid = $1 AND s.school_uuid = $2 AND u.deleted_at IS NULL AND s.deleted_at IS NULL`
     
     err := repo.db.QueryRowx(query, studentUUID, schoolUUID).Scan(&student.UUID, &student.ParentUUID, &student.SchoolUUID, &student.FirstName,
-        &student.LastName, &student.Gender, &student.Grade, &student.StudentAddress, &student.StudentPickupPoint, &student.CreatedAt,
+        &student.LastName, &student.Gender, &student.Grade, &student.Status, &student.StudentAddress, &student.StudentPickupPoint, &student.CreatedAt,
         &parentDetails.UserUUID, &student.UserUsername, &student.UserEmail, &parentDetails.FirstName, &parentDetails.LastName, &parentDetails.Phone, &parentDetails.Address)
     if err != nil {
         return entity.Student{}, entity.ParentDetails{}, err
@@ -112,8 +112,8 @@ func (repo *StudentRepository) FetchSpecStudentWithParents(studentUUID uuid.UUID
 
 func (repo *StudentRepository) SaveStudent(student entity.Student) error {
 	query := `INSERT INTO students (student_id, student_uuid, parent_uuid, school_uuid, student_first_name, student_last_name,
- 	student_gender, student_grade, student_address, student_pickup_point, created_by)
- 	VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`
+ 	student_gender, student_grade, student_status, student_address, student_pickup_point, created_by)
+ 	VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)`
 	res, err := repo.db.Exec(query, 
 		student.ID, 
 		student.UUID, 
@@ -123,6 +123,7 @@ func (repo *StudentRepository) SaveStudent(student entity.Student) error {
 		student.LastName, 
 		student.Gender, 
 		student.Grade, 
+		student.Status,
 		student.StudentAddress, 
 		student.StudentPickupPoint.String, // Menggunakan String untuk menyimpan nilai JSON
 		student.CreatedBy,

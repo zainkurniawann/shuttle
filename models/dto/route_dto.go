@@ -11,6 +11,7 @@ type StudentDTO struct {
 	StudentUUID      	string `json:"student_uuid"`
 	StudentFirstName 	string `json:"student_first_name"`
 	StudentLastName  	string `json:"student_last_name"`
+	StudentStatus	  	string `json:"student_status"`
 	StudentOrder 		string  `json:"student_order"`
 }
 
@@ -58,6 +59,7 @@ type RouteResponseByDriverDTO struct {
 	SchoolUUID         string         `json:"school_uuid,omitempty" db:"school_uuid"`
 	StudentFirstName   string         `json:"student_first_name,omitempty" db:"student_first_name"`
 	StudentLastName    string        `json:"student_last_name,omitempty" db:"student_last_name"`
+	StudentStatus		string			`json:"student_status,omitempty" db:"student_status"`
 	StudentAddress     string         `json:"student_address,omitempty" db:"student_address"`
 	StudentPickupPoint string         `json:"student_pickup_point,omitempty" db:"student_pickup_point"`
 	ShuttleUUID        sql.NullString `db:"shuttle_uuid" json:"shuttle_uuid"`

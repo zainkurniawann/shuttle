@@ -17,6 +17,7 @@ type RouteAssignment struct {
 	StudentUUID		 uuid.UUID		`db:"Student_uuid"`
 	StudentFirstName  string
     StudentLastName   string
+	StudentStatus	string
 	StudentOrder	string
 	StudentName		string			`json:"student_name"`
 	SchoolUUID       uuid.UUID      `db:"school_uuid"`

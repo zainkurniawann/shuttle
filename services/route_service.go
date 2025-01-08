@@ -14,7 +14,6 @@ type RouteServiceInterface interface {
 	GetAllRoutesByAS(schoolUUID string) ([]dto.RoutesResponseDTO, error)
 	GetSpecRouteByAS(routeNameUUID, driverUUID string) (dto.RoutesResponseDTO, error)
 	GetAllRoutesByDriver(driverUUID string) ([]dto.RouteResponseByDriverDTO, error)
-	GetSpecRouteByDriver(driverUUID, studentUUID string) (*dto.RouteResponseByDriverDTO, error)
 	AddRoute(route dto.RoutesRequestDTO, schoolUUID, username string) error
 	GetSchoolUUIDByUserUUID(userUUID string) (string, error)
 	GetDriverUUIDByRouteName(routeNameUUID string) (string, error)
@@ -77,6 +76,7 @@ func (s *routeService) GetSpecRouteByAS(routeNameUUID, driverUUID string) (dto.R
 			StudentUUID:      route.StudentUUID.String(),
 			StudentFirstName: defaultString(route.StudentFirstName),
 			StudentLastName:  defaultString(route.StudentLastName),
+			StudentStatus: route.StudentStatus,
 			StudentOrder:     route.StudentOrder,
 		}
 		driverInfo.Students = append(driverInfo.Students, student)
@@ -99,14 +99,6 @@ func (service *routeService) GetAllRoutesByDriver(driverUUID string) ([]dto.Rout
 		return nil, err
 	}
 	return routes, nil
-}
-
-func (service *routeService) GetSpecRouteByDriver(driverUUID, studentUUID string) (*dto.RouteResponseByDriverDTO, error) {
-	route, err := service.routeRepository.FetchSpecRouteByDriver(driverUUID, studentUUID)
-	if err != nil {
-		return nil, err
-	}
-	return route, nil
 }
 
 func (service *routeService) AddRoute(route dto.RoutesRequestDTO, schoolUUID, username string) error {
